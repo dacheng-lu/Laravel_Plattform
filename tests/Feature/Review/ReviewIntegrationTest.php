@@ -289,6 +289,6 @@ class ReviewIntegrationTest extends TestCase
      */
     private function storedRows(string $table): string
     {
-        return (string) json_encode(DB::table($table)->get()->toArray(), JSON_PARTIAL_OUTPUT_ON_ERROR);
+        return (string) json_encode(DB::table($table)->get()->toArray(), JSON_UNESCAPED_UNICODE | JSON_PARTIAL_OUTPUT_ON_ERROR);
     }
 }
