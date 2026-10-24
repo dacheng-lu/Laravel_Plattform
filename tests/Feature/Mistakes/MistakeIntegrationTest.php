@@ -117,6 +117,55 @@ class MistakeIntegrationTest extends TestCase
         $this->assertSame(3, Submission::query()->where('lesson_id', $lesson->getKey())->whereNotNull('evaluated_at')->count());
     }
 
+    public function test_the_kill_switch_hides_the_students_own_hint(): void
+    {
+        config([
+            'services.anthropic.enabled' => true,
+            'services.anthropic.key' => 'test-key',
+            'services.anthropic.model' => 'claude-opus-5-5',
+            'lernplattform.mistakes.enabled' => true,
+            'lernplattform.mistakes.threshold' => 80,
+            'lernplattform.mistakes.min_confidence' => 0.6,
+        ]);
+
+        $student = User::factory()->student($this->schoolClass)->create(['name' => 'Mia Hoffmann']);
+
+        $lesson = Lesson::factory()
+            ->for($this->schoolClass)
+            ->for($this->teacher, 'teacher')
+            ->publishedFor([$student])
+            ->create(['subject' => 'Biologie', 'topic' => 'Fotosynthese', 'held_on' => '2026-10-21']);
+
+        $question = Question::factory()->for($lesson)->create([
+            'type' => QuestionType::Comprehension,
+            'prompt' => 'Was braucht die Pflanze für die Fotosynthese?',
+            'expected_answer' => 'Licht, Wasser und Kohlenstoffdioxid.',
+            'position' => 1,
+        ]);
+
+        Http::fake(['api.anthropic.com/*' => $this->messageBody($this->evaluation($question, 61))]);
+
+        $this->handIn($lesson, $student, $question);
+
+        // Voraussetzung: die Antwort trägt wirklich eine Fehlerart, sonst prüfte der Test nichts.
+        $this->assertSame(MistakeType::Procedure, $this->answerOf($student, $lesson)->mistake_type);
+
+        // Positivkontrolle: eingeschaltet steht der Tipp neben der Antwort.
+        Livewire::actingAs($student)
+            ->test(WorkOnHomework::class, ['lesson' => $lesson])
+            ->assertOk()
+            ->assertSee(MistakeType::Procedure->feedbackHint());
+
+        // Kill-Switch: ausgeschaltet verschwindet der Tipp – die Rückmeldung zur Antwort bleibt sichtbar.
+        config()->set('lernplattform.mistakes.enabled', false);
+
+        Livewire::actingAs($student)
+            ->test(WorkOnHomework::class, ['lesson' => $lesson])
+            ->assertOk()
+            ->assertDontSee(MistakeType::Procedure->feedbackHint())
+            ->assertSee('Fast: ein Schritt fehlt.');
+    }
+
     public function test_a_teacher_correction_survives_a_second_run_of_the_recorder(): void
     {
         config([

@@ -15,10 +15,8 @@ use App\Models\Submission;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Actions\ViewAction;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
 
 /**
@@ -333,10 +331,12 @@ class MistakeCorrectionTest extends TestCase
         $this->assertTrue($this->teacher->can('correctMistake', $this->answer));
         $this->assertTrue($admin->can('correctMistake', $this->answer));
 
-        // … and the teacher is offered the action in the submission view: the Livewire component renders its label.
+        // … and the teacher is offered the action in the submission view: the Livewire component renders it and mounts it
+        // as visible, so the call below reaches the form.
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
-            ->assertSee('Fehlerart korrigieren');
+            ->assertSee('Fehlerart korrigieren')
+            ->assertActionVisible($action);
 
         // Another school, a colleague without this lesson, the student and the operator may not.
         foreach ([$foreignTeacher, $colleague, $this->student, User::factory()->operator()->create()] as $viewer) {
@@ -373,11 +373,10 @@ class MistakeCorrectionTest extends TestCase
         $this->assertNull($foreignAnswer->mistake_source);
         $this->assertSame(15, $foreignAnswer->score);
 
-        // A teacher of another school really executes the action: the page already refuses the lesson, so the attempt
-        // ends in a 403 (or the policy's AuthorizationException) and writes nothing.
+        // A teacher of another school does not get the action at all: it stays hidden, so there is no path to call it.
         $this->assertFalse($foreignTeacher->can('view', $this->lesson));
 
-        $this->attemptCorrectionAs($foreignTeacher);
+        $this->assertCorrectionHiddenFor($foreignTeacher);
 
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
@@ -385,8 +384,7 @@ class MistakeCorrectionTest extends TestCase
         $this->assertSame(MistakeSource::Demo, $this->otherAnswer->mistake_source);
 
         // Fehlerpfad im Livewire-Pfad: the student moved to another school, so the lesson's own teacher may not see
-        // them any more – the component does not render the action and the policy denies it, so a forged request has no
-        // action to mount. The stored state stays as it was.
+        // them any more – the component hides the action, and the stored state stays as it was.
         $ownClassId = $this->student->school_class_id;
         $ownSchoolId = $this->student->school_id;
         $this->student->update(['school_class_id' => $foreignClass->id, 'school_id' => $foreignClass->school_id]);
@@ -396,7 +394,7 @@ class MistakeCorrectionTest extends TestCase
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->assertSee('Ansehen')
-            ->assertDontSee('Fehlerart korrigieren');
+            ->assertActionHidden($action);
 
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
@@ -424,25 +422,13 @@ class MistakeCorrectionTest extends TestCase
     }
 
     /**
-     * Tries the correction as the given user. Only a refusal counts here: the policy's AuthorizationException or the
-     * 403 of the page it belongs to. Every other exception is a real error and is passed on.
+     * The Livewire path for a user who may not correct: the action is not offered at all, so there is nothing to call.
+     * A forged call cannot reach it either – without a visible action Filament has none to mount.
      */
-    private function attemptCorrectionAs(User $viewer): void
+    private function assertCorrectionHiddenFor(User $viewer): void
     {
-        try {
-            Livewire::actingAs($viewer)
-                ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
-                ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                    'mistakes' => [
-                        $this->answer->getKey() => MistakeType::OffTopic->value,
-                        $this->otherAnswer->getKey() => MistakeType::Procedure->value,
-                        $this->plainAnswer->getKey() => '',
-                    ],
-                ]);
-        } catch (AuthorizationException) {
-            // Refused by the policy.
-        } catch (HttpExceptionInterface $refusal) {
-            $this->assertSame(403, $refusal->getStatusCode(), 'A refusal by the platform is a 403.');
-        }
+        Livewire::actingAs($viewer)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->assertActionHidden(TestAction::make('correctMistakes')->table($this->submission));
     }
 }

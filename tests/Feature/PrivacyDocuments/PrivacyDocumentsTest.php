@@ -234,10 +234,12 @@ class PrivacyDocumentsTest extends TestCase
     }
 
     /**
-     * Only the evaluation of a recording replaces names. Notes, worksheet files, answers and the "Erklär's mir" chat
-     * reach the provider as they stand (ClaudeLessonAssistant), and the templates may not say otherwise.
+     * What the templates say about names follows the code: the evaluation of a submission, the homework draft and the
+     * practice-task draft replace the names of the class and its teacher before the request (ClaudeLessonAssistant),
+     * worksheet files and the "Erklär's mir" chat go as they stand. No template may still claim that answers leave the
+     * platform unfiltered.
      */
-    public function test_the_ai_statements_say_what_is_sent_unfiltered(): void
+    public function test_the_ai_statements_say_which_function_replaces_names(): void
     {
         $this->actingAs($this->schoolAdmin());
 
@@ -249,22 +251,28 @@ class PrivacyDocumentsTest extends TestCase
                 ->assertSee('ohne Ersetzung von Namen')
                 ->assertSee('können Namen enthalten')
                 ->assertSee('Bei der Auswertung einer Aufnahme ersetzt die Plattform')
+                ->assertSee('bei der Auswertung einer Abgabe')
                 ->assertDontSee('Vor jeder KI-Auswertung')
                 ->assertDontSee('ohne Namen und Benutzerkennungen')
-                ->assertDontSee('Für die KI gehen nur Texte, nie Audio, und nur pseudonymisiert');
+                ->assertDontSee('Für die KI gehen nur Texte, nie Audio, und nur pseudonymisiert')
+                // Die frühere Aussage, Antworten gingen ungefiltert hinaus, ist widerlegt.
+                ->assertDontSee('Notizen, Arbeitsblatt-Dateien, Antworten und Gespräche');
 
             $this->assertStringContainsString('Erklär’s mir', $dsfa->getContent());
 
             $this->get(PrivacyDocuments::getUrl(['document' => 'verzeichnis']))->assertOk()
                 ->assertSee('Arbeitsblatt-Dateien')
-                ->assertSee('Gespräche in „Erklär’s mir“');
+                ->assertSee('Gespräche in „Erklär’s mir“')
+                ->assertSee('ersetzt die Plattform vorher die Namen der Klasse');
         }
 
         config(['services.anthropic.enabled' => true]);
 
         $this->get(PrivacyDocuments::getUrl(['document' => 'elterninformation']))->assertOk()
             ->assertSee('Arbeitsblatt-Dateien')
-            ->assertSee('werden aber nicht entfernt')
+            ->assertSee('ersetzt die Plattform vorher die Namen der Klasse')
+            ->assertSee('keine Anonymisierung')
+            ->assertDontSee('werden aber nicht entfernt')
             ->assertDontSee('ohne Namen und Benutzerkennungen')
             ->assertDontSee('nur mit geeigneten Garantien');
     }

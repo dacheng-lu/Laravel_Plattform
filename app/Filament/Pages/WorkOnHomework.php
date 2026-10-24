@@ -340,7 +340,7 @@ class WorkOnHomework extends Page
                         $this->plainText("answer_feedback_{$question->getKey()}", $answer?->feedback, 'Rückmeldung')
                             ->visible(filled($answer?->feedback)),
                         $this->plainText("answer_mistake_{$question->getKey()}", $answer?->mistake_type?->feedbackHint(), 'Tipp')
-                            ->visible($answer?->mistake_type !== null),
+                            ->visible((bool) config('lernplattform.mistakes.enabled') && $answer?->mistake_type !== null),
                     ]);
             })->all(),
             Section::make($this->lesson->isPracticeTask() ? "So fasst deine Lehrkraft „{$this->competencyName()}“ zusammen" : 'So fasst deine Lehrkraft die Stunde zusammen')

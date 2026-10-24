@@ -1,6 +1,6 @@
 @php
     $aiStatus = $aiEnabled
-        ? "eingeschaltet: {$aiData} gehen an Anthropic PBC (USA). Name und Benutzerkennung des Kontos werden nicht mitgesendet, Namen im Freitext oder auf Arbeitsblättern dagegen schon"
+        ? "eingeschaltet: {$aiData} gehen an Anthropic PBC (USA). Name und Benutzerkennung des Kontos werden nicht mitgesendet. Bei der Auswertung von Abgaben und bei den Entwürfen von Hausaufgaben und Förderaufgaben ersetzt die Plattform vorher die Namen der Klasse und der Lehrkraft durch Platzhalter; das ist keine Anonymisierung, Namen im Freitext und auf Arbeitsblättern bleiben möglich"
         : 'ausgeschaltet: keine Daten verlassen die Plattform';
     $transcriptionStatus = $transcriptionEnabled
         ? 'eingeschaltet: Audio geht zur Texterkennung an den eingerichteten Dienst'
@@ -118,7 +118,7 @@
                 'Die KI bekommt die Anweisung, Personen nie zu erraten oder zu identifizieren.',
                 'Audio geht nie an die KI. Die Stimme wird nicht zur Identifizierung ausgewertet.',
                 'Grenze: Die Ersetzung ist eine technische Hilfe und keine Anonymisierung. Die Schule geht von personenbezogenen Daten aus.',
-                'Grenze: Ersetzt wird nur bei der Auswertung einer Aufnahme und beim Übernehmen in die Notizen. Notizen, die die Lehrkraft selbst schreibt, Arbeitsblatt-Dateien, Antworten und Gespräche gehen bei eingeschalteter KI unverändert an den Anbieter und können Namen enthalten.',
+                'Grenze: Ersetzt werden die Namen der Klasse und der Lehrkraft bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben. Arbeitsblatt-Dateien gehen unverändert an den Anbieter und können Namen enthalten; im „Erklär’s mir“-Chat ersetzt die Plattform nichts.',
             ],
         ],
         [
@@ -140,7 +140,7 @@
                 'Sie werden nur vom Betreiber über die Serverkonfiguration eingeschaltet, nicht von Lehrkräften. Die Plattform prüft dabei nicht, ob Vertrag und Garantien vorliegen. Das klärt der Betreiber vor dem Einschalten, und die Schule lässt es sich bestätigen (Checkliste).',
                 'Die Live-Texterkennung läuft ausschließlich lokal im Browser. Steht sie dort nicht lokal zur Verfügung, wird sie nicht genutzt; es gibt keinen Rückfall auf einen Cloud-Dienst.',
                 'Audio geht nie an die KI. Die Auswertung einer Aufnahme sendet nur Text und nur pseudonymisiert.',
-                "Grenze: Die übrigen KI-Funktionen (Hausaufgaben-Entwurf, Auswertung von Abgaben, „Erklär’s mir“) senden {$aiData} ohne Ersetzung von Namen.",
+                "Grenze: Im „Erklär’s mir“-Chat sendet die Plattform {$aiData} ohne Ersetzung von Namen; dort können Namen im Gespräch stehen.",
             ],
         ],
         [
@@ -211,7 +211,7 @@
         'KI und Dritte' => [
             'KI-Auswertung und Server-Transkription sind ab Werk ausgeschaltet und nur durch den Betreiber einzuschalten. Die Datenschutzerklärung wird vorher ergänzt.',
             'Audio erreicht nie die KI. Die Live-Texterkennung läuft nur lokal im Browser.',
-            'Bei der Auswertung einer Aufnahme und beim Übernehmen in die Notizen werden Namen der Klasse und der Lehrkraft durch Platzhalter ersetzt (Pseudonymisierung, keine Anonymisierung). Die übrigen KI-Funktionen senden Texte und Arbeitsblatt-Dateien unverändert.',
+            'Bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben werden die Namen der Klasse und der Lehrkraft durch Platzhalter ersetzt (Pseudonymisierung, keine Anonymisierung). Arbeitsblatt-Dateien gehen unverändert mit; im „Erklär’s mir“-Chat wird nichts ersetzt.',
             'Für die Fehlerart einer Antwort wertet die Plattform Frage, Erwartungshorizont und Antworttext aus. Die Namen der Klasse und der Lehrkraft ersetzt sie dabei vorher durch Platzhalter; hochgeladene Arbeitsblatt-Dateien gehen unverändert mit.',
             'Keine automatisierten Einzelentscheidungen. Nach der Transkription weist die Plattform darauf hin, das Transkript vor der Auswertung zu lesen; verbindlich macht das die Dienstanweisung. Der Verständniswert ist keine Note.',
         ],
@@ -451,7 +451,7 @@
         <li>Sie sperrt den Start einer Aufnahme nicht, wenn Einwilligungen fehlen oder widerrufen sind. Sie prüft weder Einwilligungen von Lehrkräften und weiteren Personen im Raum noch, ob die Bestätigungen der Schule (Folgenabschätzung, Personalrat und so weiter) stimmen. Das ist Sache der Schule und der Dienstanweisung.</li>
     @endif
     <li>Sie führt keine Anwesenheitsliste. Wer bei einer Aufnahme anwesend ist, gibt die Lehrkraft an.</li>
-    <li>Die Ersetzung von Namen vor der KI gibt es nur bei der Auswertung einer Aufnahme und beim Übernehmen in die Notizen, und sie ist keine Anonymisierung. Unbekannte Namen, Spitznamen und Erkennungsfehler bleiben im Text. Notizen, Arbeitsblatt-Dateien, Antworten und Gespräche gehen bei eingeschalteter KI ohne Ersetzung an den Anbieter.</li>
+    <li>Die Ersetzung von Namen vor der KI greift bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben; sie ist keine Anonymisierung. Unbekannte Namen, Spitznamen und Erkennungsfehler bleiben im Text, Arbeitsblatt-Dateien gehen unverändert mit, und im „Erklär’s mir“-Chat wird nichts ersetzt.</li>
     <li>Sie erzwingt nicht, dass die Lehrkraft das Transkript vor der Auswertung liest, und bindet das Übernehmen in die Notizen und den Hausaufgaben-Entwurf mit KI nicht an die Zustimmung zur KI-Auswertung. Übernommener Text bleibt so lange in den Notizen wie diese und geht beim Hausaufgaben-Entwurf an den KI-Anbieter. Das regelt die Dienstanweisung.</li>
     <li>Löschen kann nur die aufnehmende Lehrkraft, solange sie die Stunde leitet. Ist sie nicht erreichbar oder wurde die Stunde neu zugewiesen, hilft nur die Löschung der Stunde oder des Kontos, ein Auftrag an den Betreiber oder die automatische Löschung (siehe R10).</li>
     <li>Die Anwendung verschlüsselt Audiodateien nicht zusätzlich. Server, Datenträger und Sicherungen schützt der Betrieb.</li>

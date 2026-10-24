@@ -655,8 +655,12 @@
             <li>Texte der Schüler:innen: Zusammenfassungen, Antworten und Beiträge im „Erklär’s mir“-Chat</li>
         </ul>
         <p>
-            Namen, Benutzernamen und Benutzerkennungen werden nicht übermittelt. Freitext kann aber Angaben enthalten,
-            die jemand selbst hineinschreibt. Deshalb bitten wir alle, keine persönlichen Angaben in Texte zu schreiben.
+            Namen, Benutzernamen und Benutzerkennungen werden nicht übermittelt. Bei der Auswertung einer Abgabe, beim
+            Hausaufgaben-Entwurf und beim Entwurf einer Förderaufgabe ersetzt die Plattform außerdem vorher die Namen
+            der Klasse und der Lehrkraft durch Platzhalter („Schüler:in A“, „Lehrkraft“). Das ist eine technische
+            Hilfe und keine Anonymisierung: Unbekannte Namen, Spitznamen und Fehler der Spracherkennung bleiben im
+            Text, und hochgeladene Arbeitsblätter gehen als Bild oder PDF unverändert mit. Im „Erklär’s mir“-Chat
+            ersetzt die Plattform nichts. Deshalb bitten wir alle, keine persönlichen Angaben in Texte zu schreiben.
         </p>
         <h3>Übermittlung in die USA</h3>
         <p>
@@ -688,8 +692,9 @@
         <p>
             Die Plattform ist technisch darauf vorbereitet, später Claude von Anthropic PBC in den USA anzubinden. Das
             ist derzeit nicht aktiv. Würde die Anbindung eingeschaltet, würden Texte aus Unterrichtsstunden,
-            hochgeladene Arbeitsblätter und Texte der Schüler:innen an Anthropic übermittelt, und zwar ohne Namen,
-            Benutzernamen und Benutzerkennungen.
+            hochgeladene Arbeitsblätter und Texte der Schüler:innen an Anthropic übermittelt. Die Namen der Klasse und
+            der Lehrkraft würde die Plattform dabei vorher durch Platzhalter ersetzen, hochgeladene Arbeitsblätter
+            würden unverändert mitgehen.
         </p>
         <p>
             Weil die USA ein Drittland sind, würde das nur mit geeigneten Garantien nach Art. 44 ff. DSGVO geschehen, also
