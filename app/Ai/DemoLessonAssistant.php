@@ -160,6 +160,19 @@ class DemoLessonAssistant implements LessonAssistant
             ];
         }
 
+        // The group's most common mistake type decides the order and the wording; without one the draft stays as it is.
+        if ($mistakeType === MistakeType::Procedure) {
+            $questions = $this->applicationFirst($questions, "Schritt für Schritt: Finde ein eigenes Beispiel aus deinem Alltag, bei dem „{$term(1)}“ eine Rolle spielt, und beschreibe deinen Weg in einzelnen Schritten. Damit übst du „{$competency->name}“.");
+        } elseif ($mistakeType === MistakeType::Concept) {
+            $explanation = $description !== '' ? $this->sentenceEnd($description) : ($sentences[0] ?? "Schau dir die Stunde „{$topic}“ noch einmal an.");
+            $questions = $this->explanationFirst($questions, "Lies zuerst die kurze Erklärung: {$explanation} Erkläre danach mit eigenen Worten, was man unter „{$term(0)}“ versteht.");
+        } elseif ($mistakeType === MistakeType::Incomplete) {
+            $questions = array_map(fn (array $question): array => [
+                ...$question,
+                'prompt' => 'Ergänze den fehlenden Teil: '.$this->unlabelled($question['prompt']).' Formuliere deinen fehlenden Satzteil mit dem Satzanfang „… weil …“.',
+            ], $questions);
+        }
+
         $focus = $terms === [] ? '' : ' Im Mittelpunkt stehen '.$this->quotedList(array_column(array_slice($terms, 0, 3), 'term')).'.';
         $recap = $sentences === [] ? '' : ' '.$this->expectedAnswer($sentences, array_slice($terms, 0, 2));
 
@@ -167,6 +180,55 @@ class DemoLessonAssistant implements LessonAssistant
             'summary' => "Diese Förderaufgabe übt die Kompetenz „{$competency->name}“ ({$subject})".($description === '' ? '.' : ": {$this->sentenceEnd($description)}")."{$focus}{$recap} Die Aufgaben werden Schritt für Schritt schwerer – nimm dir Zeit, du schaffst das!",
             'questions' => array_map(fn (array $question): array => [...$question, 'competency_id' => $competency->getKey()], $questions),
         ];
+    }
+
+    /**
+     * The application question first, with a prompt of its own: the group got stuck on a step, not on the idea.
+     *
+     * @param  list<array<string, mixed>>  $questions
+     * @return list<array<string, mixed>>
+     */
+    private function applicationFirst(array $questions, string $prompt): array
+    {
+        foreach ($questions as $index => $question) {
+            if ($question['type'] !== QuestionType::Application) {
+                continue;
+            }
+
+            unset($questions[$index]);
+
+            return [[...$question, 'prompt' => $prompt], ...array_values($questions)];
+        }
+
+        return $questions;
+    }
+
+    /**
+     * The first question becomes a comprehension question after a short explanation of the idea.
+     *
+     * @param  list<array<string, mixed>>  $questions
+     * @return list<array<string, mixed>>
+     */
+    private function explanationFirst(array $questions, string $prompt): array
+    {
+        if ($questions === []) {
+            return $questions;
+        }
+
+        $first = $questions[0];
+        $first['type'] = QuestionType::Comprehension;
+        $first['prompt'] = $prompt;
+        $questions[0] = $first;
+
+        return $questions;
+    }
+
+    /**
+     * A question's wording without the heading the offline rules gave it, so a variant can set its own.
+     */
+    private function unlabelled(string $prompt): string
+    {
+        return (string) preg_replace('/^(?:Zum Aufwärmen|Jetzt wird es praktisch|Zum Knobeln):\s*/u', '', $prompt);
     }
 
     public function evaluateSubmission(Submission $submission): array

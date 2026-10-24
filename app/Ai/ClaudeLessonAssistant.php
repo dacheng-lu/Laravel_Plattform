@@ -4,6 +4,7 @@ namespace App\Ai;
 
 use App\Filament\Pages\ExplainIt;
 use App\MessageAuthor;
+use App\MistakeSource;
 use App\MistakeType;
 use App\Models\Competency;
 use App\Models\ExplanationMessage;
@@ -12,6 +13,7 @@ use App\Models\Lesson;
 use App\Models\Question;
 use App\Models\Submission;
 use App\QuestionType;
+use App\Support\Pseudonymizer;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -44,12 +46,14 @@ class ClaudeLessonAssistant implements LessonAssistant
         $competencyList = $competencies->isEmpty()
             ? 'Keine hinterlegt – setze competency_id überall auf null.'
             : $competencies->map(fn (Competency $competency): string => "- ID {$competency->id}: {$competency->area} – {$competency->name}")->implode("\n");
+        // The teacher's notes may name students, so the whole lesson context is pseudonymised before it leaves the platform.
+        $lessonContext = $this->pseudonymizerFor($lesson)->apply($this->lessonContext($lesson));
 
         $result = $this->ask(
             system: self::ROLE_PROMPT.' Aus den Notizen und Arbeitsblättern einer gehaltenen Stunde schreibst du eine verständliche Zusammenfassung für die Klasse (3 bis 5 Sätze) und entwirfst Hausaufgaben: zwei Verständnisfragen (comprehension), eine Anwendungsfrage (application), die das Gelernte auf eine neue Situation überträgt, und eine Reflexionsfrage (reflection). Die Reflexionsfrage muss sich auf einen konkreten Moment der Stunde aus den Notizen beziehen (zum Beispiel einen Versuch, eine Diskussion oder ein Beispiel an der Tafel) und das Datum der Stunde nennen, damit eine KI ohne Unterrichtsbesuch sie nicht beantworten kann. Ordne jede Frage der passendsten Kompetenz aus der gegebenen Liste zu (competency_id) oder setze null, wenn keine passt. Der Erwartungshorizont (expected_answer) ist nur für die Lehrkraft bestimmt und beschreibt, was eine gute Antwort enthält.',
             content: [
                 ...$this->worksheetBlocks($lesson),
-                ['type' => 'text', 'text' => $this->lessonContext($lesson)."\n\nKompetenzen aus dem Referenzrahmen:\n".$competencyList],
+                ['type' => 'text', 'text' => $lessonContext."\n\nKompetenzen aus dem Referenzrahmen:\n".$competencyList],
             ],
             schema: $this->objectSchema([
                 'summary' => ['type' => 'string'],
@@ -76,23 +80,26 @@ class ClaudeLessonAssistant implements LessonAssistant
     public function draftPracticeTask(Competency $competency, string $subject, Collection $sourceLessons, array $gaps, ?MistakeType $mistakeType = null): array
     {
         $gapList = $gaps === [] ? 'Keine konkreten Hinweise vorhanden.' : collect($gaps)->map(fn (string $gap): string => "- {$gap}")->implode("\n");
-        $lessons = $sourceLessons->map(fn (Lesson $lesson): string => implode("\n", array_filter([
+        // Notes and topics may name students of the lesson's class, so each lesson block is pseudonymised on its own:
+        // that keeps the labels ("Schüler:in A") of its own class instead of mixing several classes into one list.
+        $lessons = $sourceLessons->map(fn (Lesson $lesson): string => $this->pseudonymizerFor($lesson)->apply(implode("\n", array_filter([
             "Thema: {$lesson->topic}",
             'Datum der Stunde: '.($lesson->held_on?->format('d.m.Y') ?? 'unbekannt'),
             // The caller withholds the notes of lessons the teacher may not view.
             blank($lesson->notes) ? null : "Notizen der Lehrkraft:\n{$lesson->notes}",
-        ])))->implode("\n\n---\n\n");
+        ]))))->implode("\n\n---\n\n");
 
         $result = $this->ask(
             system: self::ROLE_PROMPT.' Für Schülerinnen und Schüler, bei denen sich in der Hausaufgabe eine Lücke gezeigt hat, entwirfst du eine Förderaufgabe zu genau einer Kompetenz: eine kurze Zusammenfassung (2 bis 4 Sätze), die ermutigend sagt, was geübt wird, und drei bis vier Übungsfragen, die von leicht zu schwer aufgebaut sind. Die erste Frage ist eine Verständnisfrage (comprehension), genau eine Frage ist eine Anwendungsfrage (application), die das Gelernte auf eine neue Situation überträgt. Reflexionsfragen gibt es nicht. Alle Fragen üben die genannte Kompetenz und knüpfen an die Inhalte der genannten Stunden an. Greife die Hinweise auf Lücken auf, ohne sie wörtlich zu zitieren, und formuliere ermutigend und konkret. Der Erwartungshorizont (expected_answer) ist nur für die Lehrkraft bestimmt und beschreibt, was eine gute Antwort enthält.',
             content: [[
                 'type' => 'text',
-                'text' => implode("\n\n", [
+                'text' => implode("\n\n", array_filter([
                     "Fach: {$subject}",
                     "Kompetenz: {$competency->area} – {$competency->name}\nBeschreibung: ".($competency->description ?: '(keine)'),
                     "Hinweise der KI auf Lücken (anonym):\n".$gapList,
                     "Stunden, in denen sich die Lücke gezeigt hat:\n\n".($lessons ?: '(keine)'),
-                ]),
+                    $this->mistakeFocus($mistakeType),
+                ])),
             ]],
             schema: $this->objectSchema([
                 'summary' => ['type' => 'string'],
@@ -125,18 +132,25 @@ class ClaudeLessonAssistant implements LessonAssistant
     {
         $lesson = $submission->lesson;
         $answers = $submission->answers()->get()->keyBy('question_id');
+        $pseudonymizer = $this->pseudonymizerFor($lesson, $submission->student?->name);
+        $ownSummary = (string) $submission->summary;
+        $ownSummary = trim($ownSummary) === '' ? '(keine Zusammenfassung)' : $pseudonymizer->apply($ownSummary);
+        $threshold = (int) config('lernplattform.mistakes.threshold', 80);
+        // The teacher's notes and summary name students as well, so they go through the same pseudonymizer.
+        $lessonContext = $pseudonymizer->apply($this->lessonContext($lesson));
+
         $questions = $lesson->questions->map(fn (Question $question): string => implode("\n", [
-            "Frage-ID {$question->id} ({$question->type->getLabel()}): {$question->prompt}",
-            'Erwartungshorizont: '.$question->expected_answer,
-            'Antwort: '.($answers->get($question->id)?->answer ?: '(keine Antwort)'),
+            "Frage-ID {$question->id} ({$question->type->getLabel()}): ".$pseudonymizer->apply((string) $question->prompt),
+            'Erwartungshorizont: '.$pseudonymizer->apply((string) $question->expected_answer),
+            'Antwort: '.$this->ownAnswer($answers->get($question->id)?->answer, $pseudonymizer),
         ]))->implode("\n\n");
 
         $result = $this->ask(
-            system: self::ROLE_PROMPT.' Du prüfst Hausaufgaben darauf, ob die Schülerin oder der Schüler die Stunde verstanden hat. Vergleiche die eigene Zusammenfassung und die Antworten mit den Notizen der Lehrkraft und dem Erwartungshorizont. Reflexionsfragen haben keine einzig richtige Antwort: Bewerte dort den Bezug zur Stunde, eigene Gedanken und Begründungen. Alle Punktzahlen liegen zwischen 0 und 100. Das Feedback ist ermutigend, konkret und richtet sich direkt an die Schülerin oder den Schüler. Nenne in gaps höchstens drei kurze Hinweise, was noch einmal wiederholt werden sollte. Zitiere den Erwartungshorizont nicht wörtlich.',
+            system: self::ROLE_PROMPT.' Du prüfst Hausaufgaben darauf, ob die Schülerin oder der Schüler die Stunde verstanden hat. Vergleiche die eigene Zusammenfassung und die Antworten mit den Notizen der Lehrkraft und dem Erwartungshorizont. Reflexionsfragen haben keine einzig richtige Antwort: Bewerte dort den Bezug zur Stunde, eigene Gedanken und Begründungen. Alle Punktzahlen liegen zwischen 0 und 100. Das Feedback ist ermutigend, konkret und richtet sich direkt an die Schülerin oder den Schüler. Nenne in gaps höchstens drei kurze Hinweise, was noch einmal wiederholt werden sollte. Zitiere den Erwartungshorizont nicht wörtlich. Nur wenn die Punktzahl einer Antwort unter '.$threshold.' liegt, ordnest du zusätzlich ihre Fehlerart ein (mistake_type) und nennst deine Sicherheit von 0 bis 100 (mistake_confidence); ab dieser Punktzahl setzt du beides auf null. Ordne die Antwort ein, nie die Person; keine Aussagen über Motivation oder Gefühle.',
             content: [
                 ...$this->worksheetBlocks($lesson),
-                ['type' => 'text', 'text' => $this->lessonContext($lesson)
-                    ."\n\nEigene Zusammenfassung der Schülerin oder des Schülers:\n".($submission->summary ?: '(keine Zusammenfassung)')
+                ['type' => 'text', 'text' => $lessonContext
+                    ."\n\nEigene Zusammenfassung der Schülerin oder des Schülers:\n".$ownSummary
                     ."\n\nFragen und Antworten:\n".$questions],
             ],
             schema: $this->objectSchema([
@@ -147,6 +161,8 @@ class ClaudeLessonAssistant implements LessonAssistant
                     'question_id' => ['type' => 'integer'],
                     'score' => ['type' => 'integer'],
                     'feedback' => ['type' => 'string'],
+                    'mistake_type' => ['anyOf' => [['type' => 'string', 'enum' => array_column(MistakeType::cases(), 'value')], ['type' => 'null']]],
+                    'mistake_confidence' => ['anyOf' => [['type' => 'integer'], ['type' => 'null']]],
                 ])],
             ]),
         );
@@ -154,9 +170,11 @@ class ClaudeLessonAssistant implements LessonAssistant
         $evaluatedAnswers = [];
 
         foreach ($result['answers'] as $answer) {
-            if ($answers->has($answer['question_id'])) {
-                $evaluatedAnswers[$answer['question_id']] = ['score' => $this->clamp($answer['score']), 'feedback' => (string) $answer['feedback']];
+            if (! $answers->has($answer['question_id'])) {
+                continue;
             }
+
+            $evaluatedAnswers[$answer['question_id']] = $this->evaluatedAnswer($answer);
         }
 
         return [
@@ -165,6 +183,81 @@ class ClaudeLessonAssistant implements LessonAssistant
             'gaps' => array_values(array_slice($result['gaps'], 0, 3)),
             'answers' => $evaluatedAnswers,
         ];
+    }
+
+    /**
+     * One answer of the evaluation result: score and feedback always, the mistake type only when it is a plausible
+     * classification below the configured threshold. Otherwise the keys stay away, so the caller cannot mistake a
+     * missing value for a type.
+     *
+     * @param  array<string, mixed>  $answer
+     * @return array<string, mixed>
+     */
+    private function evaluatedAnswer(array $answer): array
+    {
+        $evaluated = [
+            'score' => $this->clamp($answer['score']),
+            'feedback' => (string) $answer['feedback'],
+        ];
+
+        // The threshold holds here as well: an answer that is good enough never carries a mistake type, whatever the
+        // AI returns. Only the answer is classified, never the person.
+        if ($evaluated['score'] >= (int) config('lernplattform.mistakes.threshold', 80)) {
+            return $evaluated;
+        }
+
+        $classification = MistakeClassification::fromEvaluation($answer, MistakeSource::Claude);
+
+        if ($classification === null) {
+            return $evaluated;
+        }
+
+        return [...$evaluated, 'mistake_type' => $classification->type->value, 'mistake_confidence' => $classification->confidence];
+    }
+
+    /**
+     * Names of the lesson's class and of its teacher, plus one more name (the submitting student) when the platform
+     * knows them, so that no name leaves the platform.
+     */
+    private function pseudonymizerFor(Lesson $lesson, ?string $extraName = null): Pseudonymizer
+    {
+        $names = $lesson->schoolClass?->students()->orderBy('id')->pluck('name')->all() ?? [];
+
+        // A student who is already on the class list keeps their label; listing the name twice would make it "Person".
+        if ($extraName !== null && ! in_array($extraName, $names, true)) {
+            $names[] = $extraName;
+        }
+
+        return Pseudonymizer::forPeople($names, $lesson->teacher?->name);
+    }
+
+    /**
+     * The student's answer as it may go to the AI: without names, and labelled when there is none.
+     */
+    private function ownAnswer(?string $answer, Pseudonymizer $pseudonymizer): string
+    {
+        $answer = (string) $answer;
+
+        return trim($answer) === '' ? '(keine Antwort)' : $pseudonymizer->apply($answer);
+    }
+
+    /**
+     * The line that points the practice task at the group's most common mistake type; nothing without a type.
+     */
+    private function mistakeFocus(?MistakeType $mistakeType): ?string
+    {
+        if ($mistakeType === null) {
+            return null;
+        }
+
+        $instruction = match ($mistakeType) {
+            MistakeType::Concept => 'Beginne mit einer kurzen Erklärung der Grundidee und stelle leichte Einstiegsaufgaben.',
+            MistakeType::Procedure => 'Zeige ein durchgerechnetes Beispiel mit Teilschritten.',
+            MistakeType::Incomplete => 'Gib Aufgaben mit einem Gerüst, das die fehlenden Teile vorgibt.',
+            MistakeType::OffTopic, MistakeType::Empty => 'Bleibe bei der Kompetenz und formuliere die Aufgaben neutral.',
+        };
+
+        return "Häufigste Fehlerart der Gruppe: {$mistakeType->getLabel()}. {$instruction}";
     }
 
     public function askFollowUp(ExplanationSession $session): string
