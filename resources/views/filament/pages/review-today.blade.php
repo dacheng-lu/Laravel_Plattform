@@ -62,7 +62,7 @@
                     id="lp-review-own-answer"
                     wire:model="ownAnswer"
                     rows="4"
-                    maxlength="2000"
+                    maxlength="{{ $maxOwnAnswer }}"
                     placeholder="Schreib auf, was dir dazu einfällt …"
                     class="mt-1 block w-full resize-y rounded-xl border-none bg-white px-4 py-3 text-base text-gray-950 shadow-sm ring-1 ring-gray-950/10 placeholder:text-gray-400 focus:ring-2 focus:ring-primary-600 focus:outline-hidden sm:text-sm dark:bg-white/5 dark:text-white dark:ring-white/20 dark:placeholder:text-gray-500 dark:focus:ring-primary-500"
                 ></textarea>

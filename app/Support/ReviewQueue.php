@@ -10,7 +10,7 @@ use Illuminate\Support\Collection;
 /**
  * What a student sees in "Heute wiederholen": the questions that are due today, the oldest first, capped by the daily
  * limit. Only questions from lessons of the student's own school that were delegated to them – a question from another
- * school or from a class they left never shows up. Practice only, no score flows back from here.
+ * school never shows up. Practice only, no score flows back from here.
  */
 class ReviewQueue
 {
@@ -84,7 +84,9 @@ class ReviewQueue
             ->where(fn (Builder $query): Builder => $query
                 ->whereNull('last_reviewed_at')
                 ->orWhere('last_reviewed_at', '<', today()->startOfDay()))
-            // The school check keeps a class or school change from surfacing questions of the old school.
+            // The school check keeps a school change from surfacing questions of the old school. There is deliberately
+            // no class filter: items only come from the student's own evaluated answers, so after a class change inside
+            // the same school their own questions stay visible – that homework was delegated to them.
             ->whereHas('question.lesson', fn (Builder $lesson): Builder => $lesson
                 ->assignedTo($student)
                 ->whereHas('schoolClass', fn (Builder $schoolClass): Builder => $schoolClass->where('school_id', $student->school_id)))

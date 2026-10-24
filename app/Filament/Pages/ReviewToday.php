@@ -21,6 +21,9 @@ use UnitEnum;
  */
 class ReviewToday extends Page
 {
+    /** More than this is an essay, not a memory jog; and nothing of it is stored anyway. */
+    private const int MAX_OWN_ANSWER_LENGTH = 2000;
+
     protected string $view = 'filament.pages.review-today';
 
     protected static ?string $title = 'Heute wiederholen';
@@ -39,7 +42,7 @@ class ReviewToday extends Page
     /** The sample solution is only part of the response once the student asked for it. */
     public bool $revealed = false;
 
-    /** Only for the student's own eyes on this page: never stored, never sent anywhere. */
+    /** Only for the student's own eyes on this page: never stored, never sent anywhere, and capped below. */
     public string $ownAnswer = '';
 
     public static function canAccess(): bool
@@ -51,6 +54,15 @@ class ReviewToday extends Page
     public function mount(): void
     {
         $this->itemId = ReviewQueue::dueToday($this->student())->first()?->getKey();
+    }
+
+    /**
+     * Caps what the student typed before the page uses it anywhere. Nothing of it is stored, so a pasted essay would
+     * only bloat the request.
+     */
+    public function updatedOwnAnswer(): void
+    {
+        $this->ownAnswer = mb_substr($this->ownAnswer, 0, self::MAX_OWN_ANSWER_LENGTH);
     }
 
     /**
@@ -100,6 +112,7 @@ class ReviewToday extends Page
             'expectedAnswer' => $this->revealed ? $item?->question?->expected_answer : null,
             'remaining' => ReviewQueue::remainingToday($student),
             'dueCount' => ReviewQueue::dueCount($student),
+            'maxOwnAnswer' => self::MAX_OWN_ANSWER_LENGTH,
             'ratings' => ReviewRating::cases(),
         ];
     }
