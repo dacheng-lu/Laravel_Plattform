@@ -91,6 +91,43 @@ class MistakeRecorderTest extends TestCase
         $this->assertSame(MistakeSource::Demo, $belowThreshold->mistake_source);
     }
 
+    public function test_the_rules_never_call_a_reflection_answer_off_topic(): void
+    {
+        config()->set('lernplattform.mistakes.threshold', 80);
+        config()->set('lernplattform.mistakes.min_confidence', 0.6);
+
+        // The real offline rules decide here, not a mock: an answer that shares no word with the question.
+        $reflection = Question::factory()->for($this->lesson)->create([
+            'type' => QuestionType::Reflection,
+            'prompt' => 'Was hat dich am Versuch überrascht?',
+            'expected_answer' => 'Eine eigene Beobachtung, zum Beispiel die Bläschen am Stängel.',
+            'position' => 3,
+        ]);
+
+        $submission = Submission::factory()->for($this->lesson)->for($this->student, 'student')->create();
+
+        $reflectionAnswer = Answer::factory()->for($submission)->for($reflection)->create([
+            'answer' => 'Die Bläschen am Stängel waren für mich neu.',
+            'score' => 40,
+        ]);
+
+        // Positivkontrolle: dieselbe Antwort auf eine Verständnisfrage ist „am Thema vorbei".
+        $comprehensionAnswer = Answer::factory()->for($submission)->for($this->questions['first'])->create([
+            'answer' => 'Die Bläschen am Stängel waren für mich neu.',
+            'score' => 40,
+        ]);
+
+        $this->record($submission->fresh(['answers.question']));
+
+        // Eine Reflexionsfrage hat keine einzig richtige Antwort: die Regeln sagen hier nichts.
+        $this->assertNull($reflectionAnswer->refresh()->mistake_type);
+        $this->assertNull($reflectionAnswer->refresh()->mistake_source);
+
+        $this->assertSame(MistakeType::OffTopic, $comprehensionAnswer->refresh()->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $comprehensionAnswer->refresh()->mistake_source);
+        $this->assertSame(65, $comprehensionAnswer->refresh()->mistake_confidence);
+    }
+
     public function test_min_confidence(): void
     {
         config()->set('lernplattform.mistakes.min_confidence', 0.6);

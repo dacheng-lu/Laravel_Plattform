@@ -4,6 +4,7 @@ namespace App\Support;
 
 use App\MistakeSource;
 use App\MistakeType;
+use App\Models\User;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -14,14 +15,17 @@ class MistakeInsights
 {
     /**
      * How often each mistake type occurs per competency, counted over the classified answers of the given students and
-     * split by who classified: a model's hint ("ai", everything that is not the teacher's own order) and the teacher's
-     * confirmed or corrected type ("teacher"). The two never mix, so the overview can mark only the model's counts as
-     * a hint that may be wrong.
+     * split by who classified: the platform's rules ("rule"), a model ("ai") and the teacher's own order ("teacher").
+     * The three never mix, so the overview marks a rule's and a model's counts as a hint that may be wrong and the
+     * teacher's own counts as an order without that caveat.
+     *
+     * Only answers from lessons of classes the viewer may see are counted, so a student who moved to another school
+     * does not carry the old school's mistakes into the new teacher's overview.
      *
      * @param  list<int>  $studentIds
-     * @return array<int, array{ai: array<string, int>, teacher: array<string, int>}> competency id => counts by source
+     * @return array<int, array{rule: array<string, int>, ai: array<string, int>, teacher: array<string, int>}>
      */
-    public static function distributionByCompetency(array $studentIds): array
+    public static function distributionByCompetency(User $viewer, array $studentIds): array
     {
         if ($studentIds === []) {
             return [];
@@ -30,7 +34,9 @@ class MistakeInsights
         $rows = DB::table('answers')
             ->join('submissions', 'submissions.id', '=', 'answers.submission_id')
             ->join('questions', 'questions.id', '=', 'answers.question_id')
+            ->join('lessons', 'lessons.id', '=', 'submissions.lesson_id')
             ->whereIn('submissions.student_id', $studentIds)
+            ->whereIn('lessons.school_class_id', LearningInsights::visibleClasses($viewer)->select('id'))
             ->whereNotNull('answers.mistake_type')
             ->whereNotNull('questions.competency_id')
             ->groupBy('questions.competency_id', 'answers.mistake_type', 'answers.mistake_source')
@@ -45,8 +51,13 @@ class MistakeInsights
                 continue;
             }
 
-            // Only the teacher's own order counts as confirmed; an unknown or missing source stays a model's hint.
-            $bucket = $row->mistake_source === MistakeSource::Teacher->value ? 'teacher' : 'ai';
+            // Only the teacher's own order counts as an order; the offline rules and every model stay a hint, and an
+            // unknown or missing source counts as a model's hint, never as the teacher's word.
+            $bucket = match (MistakeSource::tryFrom((string) $row->mistake_source)) {
+                MistakeSource::Teacher => 'teacher',
+                MistakeSource::Demo => 'rule',
+                default => 'ai',
+            };
 
             $distribution[(int) $row->competency_id][$bucket][(string) $row->mistake_type] = (int) $row->mistake_count;
         }

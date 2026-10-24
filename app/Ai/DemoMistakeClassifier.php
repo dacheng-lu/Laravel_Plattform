@@ -6,6 +6,7 @@ use App\MistakeSource;
 use App\MistakeType;
 use App\Models\Answer;
 use App\Models\Question;
+use App\QuestionType;
 
 /**
  * Offline stand-in for the AI: deterministic rules over the answer text, no API call.
@@ -58,6 +59,12 @@ class DemoMistakeClassifier implements MistakeClassifier
 
         if ($this->wordCount($text) < $shortRatio * $this->wordCount((string) $question->expected_answer)) {
             return new MistakeClassification(MistakeType::Incomplete, 70, MistakeSource::Demo);
+        }
+
+        // A reflection question has no single right answer: an answer that shares no word with it is not "off topic",
+        // so the rules stay silent here instead of labelling an open answer as missing the point.
+        if ($question->type === QuestionType::Reflection) {
+            return null;
         }
 
         $answerWords = $this->contentWords($text);

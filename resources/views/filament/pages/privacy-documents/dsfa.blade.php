@@ -1,6 +1,6 @@
 @php
     $aiStatus = $aiEnabled
-        ? "eingeschaltet: {$aiData} gehen an Anthropic PBC (USA). Name und Benutzerkennung des Kontos werden nicht mitgesendet. Bei der Auswertung von Abgaben und bei den Entwürfen von Hausaufgaben und Förderaufgaben ersetzt die Plattform vorher die Namen der Klasse und der Lehrkraft durch Platzhalter; das ist keine Anonymisierung, Namen im Freitext und auf Arbeitsblättern bleiben möglich"
+        ? "eingeschaltet: {$aiData} gehen an Anthropic PBC (USA), bei der Auswertung einer Abgabe nur die Texte. Name und Benutzerkennung des Kontos werden nicht mitgesendet. Bei der Auswertung von Abgaben und bei den Entwürfen von Hausaufgaben und Förderaufgaben ersetzt die Plattform vorher die Namen der Klasse und der Lehrkraft durch Platzhalter; das ist keine Anonymisierung, Namen im Freitext und auf Arbeitsblättern bleiben möglich"
         : 'ausgeschaltet: keine Daten verlassen die Plattform';
     $transcriptionStatus = $transcriptionEnabled
         ? 'eingeschaltet: Audio geht zur Texterkennung an den eingerichteten Dienst'
@@ -43,9 +43,9 @@
         ],
         [
             'title' => 'Fehlerart einer Antwort (Hinweis)',
-            'data' => 'Fehlerart (Grundidee noch unklar, Weg/Schritt falsch, unvollständig, am Thema vorbei, kein Versuch), Sicherheit der Einordnung von 0 bis 100 (nur bei einer Einordnung durch KI) und Quelle (Demo-Regeln, KI oder Lehrkraft). Gespeichert wird nur bei Antworten unter der eingestellten Punktgrenze und nur oberhalb der Mindestsicherheit; unsichere Einordnungen werden nicht gespeichert. Ordnet die KI ein, gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter, mit den Namen der Klasse und der Lehrkraft vorher durch Platzhalter ersetzt; hochgeladene Arbeitsblatt-Dateien gehen unverändert mit.',
+            'data' => 'Fehlerart (Grundidee noch unklar, Weg/Schritt falsch, unvollständig, am Thema vorbei, kein Versuch), Sicherheit der Einordnung von 0 bis 100 (nur bei einer Einordnung durch KI) und Quelle (Demo-Regeln, KI oder Lehrkraft). Gespeichert wird nur bei Antworten unter der eingestellten Punktgrenze und nur oberhalb der Mindestsicherheit; unsichere Einordnungen werden nicht gespeichert. Ordnet die KI ein, gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter, mit den Namen der Klasse und der Lehrkraft vorher durch Platzhalter ersetzt; Arbeitsblatt-Dateien gehen bei dieser Auswertung nicht mit.',
             'people' => 'Schüler:innen',
-            'access' => 'Die Schüler:in sieht die eigenen Hinweise in der Rückmeldung zur Hausaufgabe. Die Lehrkraft der Klasse sieht die Verteilung je Kompetenz und den Einzelhinweis neben der Antwort, gekennzeichnet als „KI-Hinweis, kann falsch sein“, sowie die von einer Lehrkraft eingeordneten Fälle. Nie andere Schüler:innen, nie eine andere Schule.',
+            'access' => 'Die Schüler:in sieht die eigenen Hinweise in der Rückmeldung zur Hausaufgabe. Die Lehrkraft der Klasse sieht die Verteilung je Kompetenz und den Einzelhinweis neben der Antwort, gekennzeichnet als „KI-Hinweis, kann falsch sein“ oder, bei der Einordnung durch die Regeln der Plattform, als „Regel-Hinweis, kann falsch sein“, sowie die von einer Lehrkraft eingeordneten Fälle. Nie andere Schüler:innen, nie eine andere Schule.',
             'retention' => "Mit der Antwort, also automatisch nach {$schoolYearsKept} Schuljahren (das laufende eingerechnet). Die Lehrkraft kann eine Fehlerart jederzeit korrigieren oder zurücknehmen.",
         ],
         [
@@ -118,7 +118,7 @@
                 'Die KI bekommt die Anweisung, Personen nie zu erraten oder zu identifizieren.',
                 'Audio geht nie an die KI. Die Stimme wird nicht zur Identifizierung ausgewertet.',
                 'Grenze: Die Ersetzung ist eine technische Hilfe und keine Anonymisierung. Die Schule geht von personenbezogenen Daten aus.',
-                'Grenze: Ersetzt werden die Namen der Klasse und der Lehrkraft bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben. Arbeitsblatt-Dateien gehen unverändert an den Anbieter und können Namen enthalten; im „Erklär’s mir“-Chat ersetzt die Plattform nichts.',
+                'Grenze: Ersetzt werden die Namen der Klasse und der Lehrkraft bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben. Bei der Auswertung einer Abgabe gehen nur Texte an den Anbieter, keine Arbeitsblatt-Dateien; beim Hausaufgaben-Entwurf gehen Arbeitsblatt-Dateien unverändert mit und können Namen enthalten. Im „Erklär’s mir“-Chat ersetzt die Plattform nichts.',
             ],
         ],
         [
@@ -211,8 +211,8 @@
         'KI und Dritte' => [
             'KI-Auswertung und Server-Transkription sind ab Werk ausgeschaltet und nur durch den Betreiber einzuschalten. Die Datenschutzerklärung wird vorher ergänzt.',
             'Audio erreicht nie die KI. Die Live-Texterkennung läuft nur lokal im Browser.',
-            'Bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben werden die Namen der Klasse und der Lehrkraft durch Platzhalter ersetzt (Pseudonymisierung, keine Anonymisierung). Arbeitsblatt-Dateien gehen unverändert mit; im „Erklär’s mir“-Chat wird nichts ersetzt.',
-            'Für die Fehlerart einer Antwort wertet die Plattform Frage, Erwartungshorizont und Antworttext aus. Die Namen der Klasse und der Lehrkraft ersetzt sie dabei vorher durch Platzhalter; hochgeladene Arbeitsblatt-Dateien gehen unverändert mit.',
+            'Bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben werden die Namen der Klasse und der Lehrkraft durch Platzhalter ersetzt (Pseudonymisierung, keine Anonymisierung). Bei der Auswertung einer Abgabe gehen keine Arbeitsblatt-Dateien mit; beim Hausaufgaben-Entwurf gehen sie unverändert mit, und im „Erklär’s mir“-Chat wird nichts ersetzt.',
+            'Für die Fehlerart einer Antwort wertet die Plattform Frage, Erwartungshorizont und Antworttext aus. Die Namen der Klasse und der Lehrkraft ersetzt sie dabei vorher durch Platzhalter; Arbeitsblatt-Dateien gehen bei dieser Auswertung nicht mit.',
             'Keine automatisierten Einzelentscheidungen. Nach der Transkription weist die Plattform darauf hin, das Transkript vor der Auswertung zu lesen; verbindlich macht das die Dienstanweisung. Der Verständniswert ist keine Note.',
         ],
         'Technik' => [
@@ -451,7 +451,7 @@
         <li>Sie sperrt den Start einer Aufnahme nicht, wenn Einwilligungen fehlen oder widerrufen sind. Sie prüft weder Einwilligungen von Lehrkräften und weiteren Personen im Raum noch, ob die Bestätigungen der Schule (Folgenabschätzung, Personalrat und so weiter) stimmen. Das ist Sache der Schule und der Dienstanweisung.</li>
     @endif
     <li>Sie führt keine Anwesenheitsliste. Wer bei einer Aufnahme anwesend ist, gibt die Lehrkraft an.</li>
-    <li>Die Ersetzung von Namen vor der KI greift bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben; sie ist keine Anonymisierung. Unbekannte Namen, Spitznamen und Erkennungsfehler bleiben im Text, Arbeitsblatt-Dateien gehen unverändert mit, und im „Erklär’s mir“-Chat wird nichts ersetzt.</li>
+    <li>Die Ersetzung von Namen vor der KI greift bei der Auswertung einer Aufnahme, beim Übernehmen in die Notizen, bei der Auswertung einer Abgabe und bei den Entwürfen von Hausaufgaben und Förderaufgaben; sie ist keine Anonymisierung. Unbekannte Namen, Spitznamen und Erkennungsfehler bleiben im Text. Bei der Auswertung einer Abgabe gehen keine Arbeitsblatt-Dateien an den Anbieter (beim Hausaufgaben-Entwurf schon), und im „Erklär’s mir“-Chat wird nichts ersetzt.</li>
     <li>Sie erzwingt nicht, dass die Lehrkraft das Transkript vor der Auswertung liest, und bindet das Übernehmen in die Notizen und den Hausaufgaben-Entwurf mit KI nicht an die Zustimmung zur KI-Auswertung. Übernommener Text bleibt so lange in den Notizen wie diese und geht beim Hausaufgaben-Entwurf an den KI-Anbieter. Das regelt die Dienstanweisung.</li>
     <li>Löschen kann nur die aufnehmende Lehrkraft, solange sie die Stunde leitet. Ist sie nicht erreichbar oder wurde die Stunde neu zugewiesen, hilft nur die Löschung der Stunde oder des Kontos, ein Auftrag an den Betreiber oder die automatische Löschung (siehe R10).</li>
     <li>Die Anwendung verschlüsselt Audiodateien nicht zusätzlich. Server, Datenträger und Sicherungen schützt der Betrieb.</li>

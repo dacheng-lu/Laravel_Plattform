@@ -151,27 +151,34 @@
                                 </div>
 
                                 @php
-                                    // Counted over the answers of this class only and split by source: a model's hint may be
-                                    // wrong, the teacher's own order does not need that caveat. Unknown values are dropped
-                                    // instead of breaking the page.
+                                    // Counted over the answers of this class only and split by source: the rules' and
+                                    // a model's hints may be wrong, the teacher's own order does not need that
+                                    // caveat. Unknown values are dropped instead of breaking the page.
                                     $mistakeCounts = fn (string $source): string => collect($mistakeDistribution[$competency->id][$source] ?? [])
                                         ->mapWithKeys(fn (int $count, string $value): array => ($type = MistakeType::tryFrom($value)) === null ? [] : [$type->getLabel() => $count])
                                         ->sortDesc()
                                         ->map(fn (int $count, string $label): string => $count.'× '.$label)
                                         ->join(', ');
+                                    $ruleMistakes = $mistakeCounts('rule');
                                     $aiMistakes = $mistakeCounts('ai');
                                     $teacherMistakes = $mistakeCounts('teacher');
                                 @endphp
 
+                                @if ($ruleMistakes !== '')
+                                    <p wire:key="mistake-distribution-rule-{{ $competency->id }}" class="text-sm text-gray-600 dark:text-gray-400">
+                                        Fehlerarten: {{ $ruleMistakes }} (Regel-Hinweis, kann falsch sein)
+                                    </p>
+                                @endif
+
                                 @if ($aiMistakes !== '')
-                                    <p wire:key="mistake-distribution-{{ $competency->id }}" class="text-sm text-gray-600 dark:text-gray-400">
+                                    <p wire:key="mistake-distribution-ai-{{ $competency->id }}" class="text-sm text-gray-600 dark:text-gray-400">
                                         Fehlerarten: {{ $aiMistakes }} (KI-Hinweis, kann falsch sein)
                                     </p>
                                 @endif
 
                                 @if ($teacherMistakes !== '')
                                     <p wire:key="mistake-distribution-teacher-{{ $competency->id }}" class="text-sm text-gray-600 dark:text-gray-400">
-                                        Fehlerarten (von Lehrkraft bestätigt oder korrigiert): {{ $teacherMistakes }}
+                                        Fehlerarten (von der Lehrkraft eingeordnet): {{ $teacherMistakes }}
                                     </p>
                                 @endif
 

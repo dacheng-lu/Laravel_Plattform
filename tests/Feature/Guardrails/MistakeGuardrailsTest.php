@@ -257,6 +257,52 @@ class MistakeGuardrailsTest extends TestCase
             ->assertDontSee('Fachwissen anwenden');
     }
 
+    public function test_a_student_who_moves_to_another_school_leaves_the_old_mistakes_behind(): void
+    {
+        // Schule A: eine Klasse mit einer eingeordneten Antwort.
+        $classA = SchoolClass::factory()->create(['name' => 'Klasse 7b']);
+        $teacherA = $classA->teacher;
+        $student = User::factory()->student($classA)->create(['name' => 'Mia Hoffmann']);
+        $competency = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Brüche kürzen']);
+
+        $lessonA = Lesson::factory()->for($classA)->for($teacherA, 'teacher')->publishedFor([$student])->create([
+            'subject' => 'Mathematik',
+            'topic' => 'Brüche kürzen üben',
+            'held_on' => '2026-10-20',
+        ]);
+        $questionA = Question::factory()->for($lessonA)->create([
+            'competency_id' => $competency->id,
+            'type' => QuestionType::Comprehension,
+            'prompt' => 'Wie kürzt du 6/8?',
+            'position' => 1,
+        ]);
+        $submissionA = Submission::factory()->for($lessonA)->for($student, 'student')->evaluated(40)->create();
+        Answer::factory()->for($submissionA)->for($questionA)
+            ->mistake(MistakeType::Procedure, MistakeSource::Demo, 85)
+            ->create(['score' => 30]);
+
+        // Positivkontrolle: solange die Schülerin in Schule A ist, sieht deren Lehrkraft die Verteilung.
+        Livewire::actingAs($teacherA)->test(LearningProgress::class)
+            ->assertOk()
+            ->assertSee('1× Weg/Schritt falsch')
+            ->assertSee('Regel-Hinweis, kann falsch sein');
+
+        // Umzug: dieselbe Schülerin, dieselben Antworten in der alten Stunde, neue Klasse in Schule B.
+        $teacherB = User::factory()->teacher()->create();
+        $classB = SchoolClass::factory()->for($teacherB, 'teacher')->create(['name' => 'Klasse 8a']);
+        $this->assertNotSame($classA->school_id, $classB->school_id);
+
+        $student->update(['school_class_id' => $classB->id, 'school_id' => $classB->school_id]);
+
+        // Die neue Lehrkraft sieht die Schülerin und ihre Kompetenz – aber keine Fehlerart aus der alten Schule.
+        Livewire::actingAs($teacherB)->test(LearningProgress::class)
+            ->assertOk()
+            ->assertSee('Mia Hoffmann')
+            ->assertSee('Brüche kürzen')
+            ->assertDontSee('Weg/Schritt falsch')
+            ->assertDontSee('Regel-Hinweis, kann falsch sein');
+    }
+
     public function test_the_evaluation_request_carries_no_name_of_the_student(): void
     {
         config([

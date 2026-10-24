@@ -18,6 +18,7 @@ use Filament\Actions\ViewAction;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * The teacher may correct the mistake type of an answer in the submission view (spec AC-6). The correction is a hint:
@@ -111,7 +112,7 @@ class MistakeCorrectionTest extends TestCase
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->mountAction(TestAction::make(ViewAction::class)->table($this->submission))
-            ->assertMountedActionModalSee(['Grundidee noch unklar', 'KI-Hinweis, kann falsch sein']);
+            ->assertMountedActionModalSee(['Grundidee noch unklar', 'Regel-Hinweis, kann falsch sein']);
 
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
@@ -231,11 +232,11 @@ class MistakeCorrectionTest extends TestCase
 
     public function test_the_teacher_can_withdraw_the_mistake_type(): void
     {
-        // Positivkontrolle: before the correction the classified answer is marked as an AI hint.
+        // Positivkontrolle: before the correction the classified answer is marked as a rule hint.
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->mountAction(TestAction::make(ViewAction::class)->table($this->submission))
-            ->assertMountedActionModalSee(['Grundidee noch unklar', 'KI-Hinweis, kann falsch sein']);
+            ->assertMountedActionModalSee(['Grundidee noch unklar', 'Regel-Hinweis, kann falsch sein']);
 
         // The empty option "Keine Fehlerart" is dehydrated to null: it withdraws the AI's type.
         Livewire::actingAs($this->teacher)
@@ -376,7 +377,7 @@ class MistakeCorrectionTest extends TestCase
         // A teacher of another school does not get the action at all: it stays hidden, so there is no path to call it.
         $this->assertFalse($foreignTeacher->can('view', $this->lesson));
 
-        $this->assertCorrectionHiddenFor($foreignTeacher);
+        $this->assertForcedCorrectionIsRefusedFor($foreignTeacher);
 
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
@@ -395,6 +396,9 @@ class MistakeCorrectionTest extends TestCase
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->assertSee('Ansehen')
             ->assertActionHidden($action);
+
+        // Auch der rohe Livewire-Weg schreibt nichts, obwohl diese Lehrkraft den Datensatz sieht.
+        $this->assertForcedCorrectionIsRefusedFor($this->teacher);
 
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
@@ -421,14 +425,65 @@ class MistakeCorrectionTest extends TestCase
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
     }
 
-    /**
-     * The Livewire path for a user who may not correct: the action is not offered at all, so there is nothing to call.
-     * A forged call cannot reach it either – without a visible action Filament has none to mount.
-     */
-    private function assertCorrectionHiddenFor(User $viewer): void
+    public function test_only_answers_below_the_threshold_are_offered_and_written(): void
     {
-        Livewire::actingAs($viewer)
+        // One answer below the threshold and one that is good enough: only the first one is to be corrected.
+        $nearMiss = Answer::factory()
+            ->for($this->submission)
+            ->for(Question::factory()->for($this->lesson)->create(['prompt' => 'Nenne den gemeinsamen Teiler von 6 und 8.']))
+            ->create(['answer' => 'Zwei.', 'score' => 50]);
+
+        $good = Answer::factory()
+            ->for($this->submission)
+            ->for(Question::factory()->for($this->lesson)->create(['prompt' => 'Was bedeutet Kürzen?']))
+            ->create(['answer' => 'Teilen durch denselben Faktor.', 'score' => 90]);
+
+        // The form offers only the answer below the threshold – the good one is not in the modal at all.
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->mountAction(TestAction::make('correctMistakes')->table($this->submission))
+            ->assertMountedActionModalSee('Nenne den gemeinsamen Teiler von 6 und 8.')
+            ->assertMountedActionModalDontSee('Was bedeutet Kürzen?');
+
+        // A forged request with the good answer's id writes nothing for it, while the other one is stored.
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
+                'mistakes' => [
+                    $nearMiss->getKey() => MistakeType::Procedure->value,
+                    $good->getKey() => MistakeType::OffTopic->value,
+                ],
+            ])
+            ->assertNotified('Fehlerarten gespeichert');
+
+        $this->assertSame(MistakeType::Procedure, $nearMiss->refresh()->mistake_type);
+        $this->assertSame(MistakeSource::Teacher, $nearMiss->refresh()->mistake_source);
+        // Positivkontrolle im selben Aufruf: die Antwort über der Schwelle bleibt, wie sie war.
+        $this->assertNull($good->refresh()->mistake_type);
+        $this->assertNull($good->refresh()->mistake_source);
+    }
+
+    /**
+     * The Livewire path for a user who may not correct: Filament does not offer the action at all, and a forged mount
+     * does not get through either. Filament refuses to mount a hidden table action, so the callback with its
+     * Gate::authorize never runs; if a mount ever succeeded, the call sequence below still writes nothing – the
+     * caller's assertions on the stored rows prove that either way.
+     */
+    private function assertForcedCorrectionIsRefusedFor(User $viewer): void
+    {
+        $component = Livewire::actingAs($viewer)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->assertActionHidden(TestAction::make('correctMistakes')->table($this->submission));
+
+        try {
+            // The raw Livewire methods, not the test shortcut: the way a forged request would take.
+            $component->call('mountTableAction', 'correctMistakes', (string) $this->submission->getKey());
+            $component->set('mountedTableActionsData.0.mistakes', [
+                $this->answer->getKey() => MistakeType::OffTopic->value,
+            ]);
+            $component->call('callMountedTableAction');
+        } catch (Throwable) {
+            // Refused: no action was mounted (or the platform rejects the call). Nothing was written.
+        }
     }
 }

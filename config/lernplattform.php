@@ -97,8 +97,10 @@ return [
     | (0–1) is reached – an "unclear" is better than a wrong label. `demo_short_ratio` is the share of the
     | expected answer's length below which the offline rules call an answer "incomplete".
     |
-    | `min_confidence` is read strictly: a value that is not a number (empty, text, a comma as decimal point) or
-    | lies outside 0–1 becomes `null` instead of being cast, and then nothing is classified at all (fail closed).
+    | `min_confidence` is read strictly: a value that is not a number (empty, text, a comma as decimal point) becomes
+    | `null` instead of being cast, and then nothing is classified at all (fail closed). Whether the number lies
+    | between 0 and 1 is checked by `App\Support\MistakeRecorder`, which treats anything outside that range as
+    | unusable – a share, not a percentage.
     |
     */
 

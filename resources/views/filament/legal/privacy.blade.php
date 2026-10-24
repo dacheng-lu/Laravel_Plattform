@@ -510,10 +510,10 @@
         Die Lehrkraft kann sie korrigieren oder zurücknehmen; ihre Einordnung hat Vorrang. Die Schülerin oder der
         Schüler sieht die eigenen Hinweise in der Rückmeldung zur Hausaufgabe. Die Lehrkraft sieht für die Klassen, die
         sie leiten oder unterrichten, die Verteilung je Kompetenz und den Einzelhinweis neben der Antwort,
-        gekennzeichnet als „KI-Hinweis, kann falsch sein“. Andere Schüler:innen und andere Schulen sehen nichts. Für
-        eine Einordnung durch die KI gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter (Abschnitt 7);
-        die Namen der Klasse und der Lehrkraft ersetzt die Plattform vorher durch Platzhalter, hochgeladene
-        Arbeitsblätter gehen unverändert mit. Die Fehlerart wird mit der Antwort gelöscht, die Datenauskunft im Profil
+        gekennzeichnet als „KI-Hinweis, kann falsch sein“ oder, wenn die Regeln der Plattform eingeordnet haben, als
+        „Regel-Hinweis, kann falsch sein“. Andere Schüler:innen und andere Schulen sehen nichts. Für eine Einordnung
+        durch die KI gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter (Abschnitt 7); Arbeitsblätter
+        gehen bei der Auswertung einer Abgabe nicht mit. Die Fehlerart wird mit der Antwort gelöscht, die Datenauskunft im Profil
         nennt sie samt Quelle.
     </p>
     <p>
@@ -651,7 +651,7 @@
         <h3>Was übermittelt wird</h3>
         <ul>
             <li>Texte der Unterrichtsstunden, also Notizen, Tafelbild oder Transkripttext</li>
-            <li>hochgeladene Arbeitsblätter als Bild oder PDF</li>
+            <li>hochgeladene Arbeitsblätter als Bild oder PDF – nur beim Hausaufgaben-Entwurf, nicht bei der Auswertung einer Abgabe</li>
             <li>Texte der Schüler:innen: Zusammenfassungen, Antworten und Beiträge im „Erklär’s mir“-Chat</li>
         </ul>
         <p>
@@ -659,8 +659,10 @@
             Hausaufgaben-Entwurf und beim Entwurf einer Förderaufgabe ersetzt die Plattform außerdem vorher die Namen
             der Klasse und der Lehrkraft durch Platzhalter („Schüler:in A“, „Lehrkraft“). Das ist eine technische
             Hilfe und keine Anonymisierung: Unbekannte Namen, Spitznamen und Fehler der Spracherkennung bleiben im
-            Text, und hochgeladene Arbeitsblätter gehen als Bild oder PDF unverändert mit. Im „Erklär’s mir“-Chat
-            ersetzt die Plattform nichts. Deshalb bitten wir alle, keine persönlichen Angaben in Texte zu schreiben.
+            Text. Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine Arbeitsblatt-Dateien; beim
+            Hausaufgaben-Entwurf gehen hochgeladene Arbeitsblätter als Bild oder PDF unverändert mit. Im „Erklär’s
+            mir“-Chat ersetzt die Plattform nichts. Deshalb bitten wir alle, keine persönlichen Angaben in Texte zu
+            schreiben.
         </p>
         <h3>Übermittlung in die USA</h3>
         <p>

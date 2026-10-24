@@ -45,6 +45,7 @@ class MistakePrivacyDocumentsTest extends TestCase
                     'Weg/Schritt falsch',
                     'Demo-Regeln, KI oder Lehrkraft',
                     'KI-Hinweis, kann falsch sein',
+                    'Regel-Hinweis, kann falsch sein',
                     'nicht zur Person',
                     'erscheint nicht im Elternbericht',
                     'Die Fehlerart wird mit der Antwort gelöscht',
@@ -58,6 +59,7 @@ class MistakePrivacyDocumentsTest extends TestCase
                     'Weg/Schritt falsch',
                     'Demo-Regeln, KI oder Lehrkraft',
                     'KI-Hinweis, kann falsch sein',
+                    'Regel-Hinweis, kann falsch sein',
                     'nicht im Bericht für das Elterngespräch',
                     'Die Fehlerart einer Antwort wird mit der Antwort gelöscht',
                     'Datenauskunft nennt Fehlerart und Quelle',
@@ -71,6 +73,7 @@ class MistakePrivacyDocumentsTest extends TestCase
                     'Weg/Schritt falsch',
                     'Mindestsicherheit',
                     'KI-Hinweis, kann falsch sein',
+                    'Regel-Hinweis, kann falsch sein',
                     'nicht im Elternbericht',
                     'Lehrkraft kann sie korrigieren',
                 ],
@@ -111,22 +114,37 @@ class MistakePrivacyDocumentsTest extends TestCase
     {
         config(['services.anthropic.enabled' => true]);
 
-        // Die Einordnung geht mit Frage, Erwartungshorizont und Antworttext hinaus, die Namen der Klasse und der
-        // Lehrkraft ersetzt die Plattform vorher; Arbeitsblätter gehen unverändert mit.
-        foreach (['privacy-documents.dsfa', 'privacy-documents.verzeichnis'] as $page) {
-            $this->open($page)
-                ->assertOk()
-                ->assertSee('Fehlerart')
-                ->assertSee('Platzhalter')
-                ->assertSee('Arbeitsblatt');
-        }
+        // D1: Die Auswertung einer Abgabe sendet nur Texte – die Positivkontrolle nennt den Entwurf, der die
+        // Arbeitsblätter weiterhin mitschickt.
+        $this->open('legal.privacy')
+            ->assertOk()
+            ->assertSee('Erklär’s mir')
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine Arbeitsblatt-Dateien')
+            ->assertSee('gehen hochgeladene Arbeitsblätter als Bild oder PDF unverändert mit');
+
+        $this->open('privacy-documents.dsfa')
+            ->assertOk()
+            ->assertSee('Datenschutz-Folgenabschätzung (Art. 35 DSGVO)')
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an den Anbieter, keine Arbeitsblatt-Dateien')
+            ->assertSee('Für die Fehlerart einer Antwort wertet die Plattform Frage, Erwartungshorizont und Antworttext aus')
+            ->assertSee('Arbeitsblatt-Dateien gehen bei dieser Auswertung nicht mit');
+
+        $this->open('privacy-documents.verzeichnis')
+            ->assertOk()
+            ->assertSee('Fehlerart der Antworten')
+            ->assertSee('bei der Auswertung einer Abgabe nur Texte ohne Arbeitsblatt-Dateien')
+            ->assertSee('Arbeitsblatt-Dateien gehen bei der Auswertung einer Abgabe nicht mit');
 
         $this->open('privacy-documents.elterninformation')
             ->assertOk()
-            ->assertSee('Fehlerart')
-            ->assertSee('Platzhalter')
-            ->assertSee('Arbeitsblätter')
-            ->assertSee('können Namen enthalten');
+            ->assertSee('Künstliche Intelligenz')
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine hochgeladenen Arbeitsblätter')
+            ->assertSee('beim Hausaufgaben-Entwurf gehen sie unverändert mit und können Namen enthalten');
+
+        $this->open('privacy-documents.checkliste')
+            ->assertOk()
+            ->assertSee('Checkliste für die Einführung')
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine Arbeitsblatt-Dateien (Fotos, PDF)');
     }
 
     public function test_the_privacy_policy_names_the_ai_provider_only_while_the_connection_is_on(): void

@@ -13,6 +13,7 @@ use GuzzleHttp\Promise\PromiseInterface;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Storage;
 use Tests\TestCase;
 
 /**
@@ -284,6 +285,56 @@ class ClaudeEvaluationMistakeTest extends TestCase
         $this->assertSame('procedure', $belowThreshold['answers'][$question->id]['mistake_type']);
 
         Http::assertSentCount(3);
+    }
+
+    /**
+     * The spec guardrail: an evaluation carries texts only. Even a lesson with a worksheet sends no document or image
+     * block; the homework draft of the same lesson still does, so the guard is not simply a broken attachment path.
+     */
+    public function test_the_evaluation_sends_no_worksheet_file(): void
+    {
+        Storage::fake('local');
+        Storage::disk('local')->put('worksheets/arbeitsblatt.pdf', "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n");
+
+        [$submission, $question] = $this->submissionNamingTheStudent();
+        $lesson = $submission->lesson;
+        $lesson->update(['attachments' => ['worksheets/arbeitsblatt.pdf']]);
+
+        Http::fake(['api.anthropic.com/*' => Http::sequence()
+            ->push($this->messageBody([
+                'understanding_score' => 55,
+                'feedback' => 'Guter Anfang!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 50, 'feedback' => 'Ein Schritt fehlt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 85],
+                ],
+            ]))
+            ->push($this->messageBody([
+                'summary' => 'Pflanzen brauchen Licht und Wasser.',
+                'questions' => [
+                    ['type' => 'comprehension', 'prompt' => 'Was ist Chlorophyll?', 'expected_answer' => 'Der grüne Farbstoff.', 'competency_id' => null],
+                ],
+            ]))]);
+
+        app(ClaudeLessonAssistant::class)->evaluateSubmission($submission->fresh());
+
+        // Positivkontrolle: der Hausaufgaben-Entwurf derselben Stunde schickt das Arbeitsblatt weiterhin mit.
+        app(ClaudeLessonAssistant::class)->draftHomework($lesson->fresh());
+
+        $contents = Http::recorded()
+            ->map(fn (array $pair): array => $pair[0]->data()['messages'][0]['content'])
+            ->values();
+
+        $this->assertCount(2, $contents);
+
+        // Auswertung: ein Textblock, kein Bild und kein Dokument – auch wenn die Stunde ein Arbeitsblatt hat.
+        $this->assertSame(['text'], array_column($contents[0], 'type'));
+        $this->assertStringContainsString('Fragen und Antworten', $contents[0][0]['text']);
+        $this->assertStringNotContainsString('application/pdf', (string) json_encode($contents[0]));
+
+        // Der Entwurf dagegen hängt das PDF als Dokument an.
+        $this->assertSame('document', $contents[1][0]['type']);
+        $this->assertSame('application/pdf', $contents[1][0]['source']['media_type']);
     }
 
     /**

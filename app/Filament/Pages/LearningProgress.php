@@ -185,10 +185,11 @@ class LearningProgress extends Page
             'averages' => LearningInsights::competencyAverages($answers),
             'supportNeeds' => $supportNeeds,
             'supportCounts' => $supportCounts,
-            // Only the visible students' answers are counted, so a teacher never sees another school's mistakes. With
-            // the mistake types switched off nothing is shown, not even a distribution from earlier data.
+            // Only the visible students' answers from lessons of visible classes are counted, so a teacher never sees
+            // another school's mistakes – not even after a student moved. With the mistake types switched off nothing
+            // is shown, not even a distribution from earlier data.
             'mistakeDistribution' => (bool) config('lernplattform.mistakes.enabled')
-                ? MistakeInsights::distributionByCompetency($students->modelKeys())
+                ? MistakeInsights::distributionByCompetency($user, $students->modelKeys())
                 : [],
             'supportCompetencies' => $competencies->filter(fn (Competency $competency): bool => $supportCounts->has($competency->id)),
             'practiceTasks' => PracticeTasks::forClass($user, $this->schoolClassId),

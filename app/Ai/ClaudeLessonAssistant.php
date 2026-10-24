@@ -165,7 +165,8 @@ class ClaudeLessonAssistant implements LessonAssistant
                     ? ' Nur wenn die Punktzahl einer Antwort unter '.$threshold.' liegt, ordnest du zusätzlich ihre Fehlerart ein (mistake_type) und nennst deine Sicherheit von 0 bis 100 (mistake_confidence); ab dieser Punktzahl setzt du beides auf null. Ordne die Antwort ein, nie die Person; keine Aussagen über Motivation oder Gefühle.'
                     : ''),
             content: [
-                ...$this->worksheetBlocks($lesson),
+                // Spec guardrail: the evaluation carries texts only – question, expected answer, the student's own
+                // answer, summary and notes. Worksheet files stay on the platform; only the homework draft sends them.
                 ['type' => 'text', 'text' => $lessonContext
                     ."\n\nEigene Zusammenfassung der Schülerin oder des Schülers:\n".$ownSummary
                     ."\n\nFragen und Antworten:\n".$questions],

@@ -72,15 +72,25 @@ class TeacherMistakeViewTest extends TestCase
             ->assertSee('Brüche kürzen')
             ->assertSee('3× Weg/Schritt falsch')
             ->assertSee('2× Grundidee noch unklar')
-            // Never an assessment: the teacher sees that the counts come from a model.
-            ->assertSee('KI-Hinweis, kann falsch sein')
+            // Never an assessment: the teacher sees that the counts come from the rules.
+            ->assertSee('Regel-Hinweis, kann falsch sein')
             // … die Stärke-Kompetenz steht zwar auf der Seite, bekommt aber keine Fehlerzeile.
             ->assertSee('Satzbau')
             ->assertDontSee('1× Grundidee noch unklar');
     }
 
-    public function test_teacher_counts_are_separate_from_ai_counts(): void
+    public function test_teacher_counts_are_separate_from_rule_and_ai_counts(): void
     {
+        // A model's own order on the same competency: it carries the AI label, not the rule label.
+        $this->answerWithMistake(
+            $this->mia->submissions()->sole(),
+            $this->fractions,
+            40,
+            MistakeType::Incomplete,
+            MistakeSource::Claude,
+            90,
+        );
+
         // A teacher's own order on the same competency: it is not a hint that could be wrong.
         $this->answerWithMistake(
             $this->mia->submissions()->sole(),
@@ -94,13 +104,15 @@ class TeacherMistakeViewTest extends TestCase
         $page = Livewire::actingAs($this->teacher)->test(LearningProgress::class);
 
         $page->assertOk()
-            // Die KI-Zähler bleiben für sich und tragen den Hinweis …
-            ->assertSee('Fehlerarten: 3× Weg/Schritt falsch, 2× Grundidee noch unklar (KI-Hinweis, kann falsch sein)')
-            // … die Lehrkraft-Zähler stehen getrennt, ohne diesen Hinweis …
-            ->assertSee('Fehlerarten (von Lehrkraft bestätigt oder korrigiert): 1× Am Thema vorbei')
-            // … und die Einordnung der Lehrkraft zählt nicht in die KI-Verteilung hinein.
-            ->assertDontSee('2× Grundidee noch unklar, 1× Am Thema vorbei')
-            ->assertDontSee('1× Am Thema vorbei (KI-Hinweis, kann falsch sein)');
+            // Die Regel-Zähler tragen den Regel-Hinweis …
+            ->assertSee('Fehlerarten: 3× Weg/Schritt falsch, 2× Grundidee noch unklar (Regel-Hinweis, kann falsch sein)')
+            // … die KI-Zähler stehen getrennt mit ihrem eigenen Hinweis …
+            ->assertSee('Fehlerarten: 1× Unvollständig (KI-Hinweis, kann falsch sein)')
+            // … die Lehrkraft-Zähler getrennt und ohne einen Hinweis, der nach Irrtum klingt …
+            ->assertSee('Fehlerarten (von der Lehrkraft eingeordnet): 1× Am Thema vorbei')
+            // … und keine Quelle zählt in die Verteilung einer anderen hinein.
+            ->assertDontSee('1× Unvollständig (Regel-Hinweis, kann falsch sein)')
+            ->assertDontSee('2× Grundidee noch unklar, 1× Unvollständig (Regel-Hinweis, kann falsch sein)');
     }
 
     public function test_the_kill_switch_hides_the_distribution(): void
@@ -114,7 +126,7 @@ class TeacherMistakeViewTest extends TestCase
             ->assertSee('Brüche kürzen')
             ->assertDontSee('Weg/Schritt falsch')
             ->assertDontSee('Grundidee noch unklar')
-            ->assertDontSee('KI-Hinweis, kann falsch sein');
+            ->assertDontSee('Regel-Hinweis, kann falsch sein');
 
         // Positivkontrolle: eingeschaltet steht sie da.
         config()->set('lernplattform.mistakes.enabled', true);
@@ -123,7 +135,7 @@ class TeacherMistakeViewTest extends TestCase
             ->test(LearningProgress::class)
             ->assertOk()
             ->assertSee('3× Weg/Schritt falsch')
-            ->assertSee('KI-Hinweis, kann falsch sein');
+            ->assertSee('Regel-Hinweis, kann falsch sein');
     }
 
     public function test_cross_school_sees_nothing(): void
@@ -165,7 +177,7 @@ class TeacherMistakeViewTest extends TestCase
             ->assertSet('schoolClassId', $adminClass->id)
             // Positivkontrolle: the admin sees the distribution of their own class.
             ->assertSee('1× Unvollständig')
-            ->assertSee('KI-Hinweis, kann falsch sein')
+            ->assertSee('Regel-Hinweis, kann falsch sein')
             // But never the distribution of the other school.
             ->assertDontSee('3× Weg/Schritt falsch');
     }

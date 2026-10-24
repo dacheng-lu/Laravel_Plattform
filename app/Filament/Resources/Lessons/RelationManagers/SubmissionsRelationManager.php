@@ -22,6 +22,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -95,11 +96,13 @@ class SubmissionsRelationManager extends RelationManager
                                     })
                                     ->color(fn (?Answer $record): string => $record?->mistake_source === MistakeSource::Teacher ? 'success' : 'warning')
                                     ->placeholder('Nicht eingeordnet')
-                                    // Never an assessment: an AI hint is marked as such, the teacher's own order stays visible.
+                                    // Never an assessment: a rule's or a model's hint is marked as such, the teacher's
+                                    // own order stays visible without that caveat.
                                     ->helperText(fn (?Answer $record): ?string => match (true) {
                                         $record?->mistake_source === MistakeSource::Teacher && $record->mistake_type === null => 'Von der Lehrkraft: keine Fehlerart',
                                         $record?->mistake_type === null => null,
                                         $record->mistake_source === MistakeSource::Teacher => 'Von der Lehrkraft eingeordnet',
+                                        $record->mistake_source === MistakeSource::Demo => 'Regel-Hinweis, kann falsch sein',
                                         default => 'KI-Hinweis, kann falsch sein',
                                     }),
                             ]),
@@ -139,14 +142,19 @@ class SubmissionsRelationManager extends RelationManager
                     ->visible(function (Submission $record): bool {
                         $first = $record->answers->first();
 
-                        return $first instanceof Answer && Gate::allows('correctMistake', $first);
+                        // Nothing to correct when every answer is good enough, and only whoever may re-classify this
+                        // submission's answers sees the action at all; the action checks the same right again before
+                        // it writes, so a hidden action stays refused even if it were mounted.
+                        return $first instanceof Answer
+                            && self::correctableAnswers($record)->isNotEmpty()
+                            && Gate::allows('correctMistake', $first);
                     })
                     ->fillForm(fn (Submission $record): array => [
-                        'mistakes' => $record->answers
+                        'mistakes' => self::correctableAnswers($record)
                             ->mapWithKeys(fn (Answer $answer): array => [$answer->getKey() => $answer->mistake_type?->value ?? ''])
                             ->all(),
                     ])
-                    ->schema(fn (Submission $record): array => $record->answers
+                    ->schema(fn (Submission $record): array => self::correctableAnswers($record)
                         ->map(fn (Answer $answer): Select => Select::make("mistakes.{$answer->getKey()}")
                             ->label(Str::limit($answer->question->prompt, 80))
                             ->options(self::mistakeTypeOptions())
@@ -164,8 +172,10 @@ class SubmissionsRelationManager extends RelationManager
                             Gate::authorize('correctMistake', $answers->first());
                         }
 
-                        DB::transaction(function () use ($answers, $submitted): void {
-                            foreach ($answers as $answer) {
+                        DB::transaction(function () use ($record, $submitted): void {
+                            // Only the answers the form offered – those below the threshold, like the automatic
+                            // classification. An answer smuggled into the request stays untouched.
+                            foreach (self::correctableAnswers($record) as $answer) {
                                 // Only the answers this submission's form offered count: an id smuggled in from
                                 // elsewhere is ignored.
                                 if (! array_key_exists($answer->getKey(), $submitted)) {
@@ -214,6 +224,21 @@ class SubmissionsRelationManager extends RelationManager
                     ->modalSubmitActionLabel('Zurückgeben')
                     ->successNotificationTitle('Abgabe zurückgegeben'),
             ]);
+    }
+
+    /**
+     * The answers the correction form offers and the action may write: only those below the configured threshold,
+     * exactly like the automatic classification. A better answer carries no hint, so there is nothing to correct.
+     *
+     * @return Collection<int, Answer>
+     */
+    private static function correctableAnswers(Submission $record): Collection
+    {
+        $threshold = (int) config('lernplattform.mistakes.threshold', 80);
+
+        return $record->answers
+            ->filter(fn (Answer $answer): bool => $answer->score !== null && $answer->score < $threshold)
+            ->values();
     }
 
     /**
