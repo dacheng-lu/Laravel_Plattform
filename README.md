@@ -51,7 +51,7 @@ prüft den Stil ohne zu schreiben, `vendor/bin/pint` korrigiert ihn.
 | `APP_FAKER_LOCALE` | Faker-Locale für Testdaten | `de_DE` |
 | `DB_CONNECTION` | Datenbanktreiber | `mysql` |
 | `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Zugang zur Datenbank | `db`, `3306`, `lernplattform`, … |
-| `DEMO_MODE` | Demo-Login aktivieren, Standard `false`; bei `APP_ENV=production` immer aus | `false` |
+| `DEMO_MODE` | Demo-Login aktivieren, Standard `false`; nur bei `APP_ENV` = `local`, `testing`, `staging` oder `demo` möglich | `false` |
 | `DEMO_USERNAME` | Benutzername des Demo-Zugangs | `hackathon` |
 | `DEMO_PASSWORD` | Passwort des Demo-Zugangs, ohne Wert kein Demo-Login | – |
 
@@ -63,8 +63,9 @@ legt den Demo-Benutzer an. Fehlt eines davon, bleibt das Formular leer und es
 wird kein Benutzer erzeugt (fail closed). `DEMO_MODE` akzeptiert `true`, `1`,
 `on` und `yes`; jeder andere Wert bedeutet aus.
 
-Bei `APP_ENV=production` ist der Demo-Modus immer aus. Demo-Instanzen laufen mit
-`APP_ENV=staging`.
+Der Demo-Modus ist nur bei `APP_ENV` = `local`, `testing`, `staging` oder `demo`
+möglich; bei jedem anderen Wert (auch `production`) bleibt er aus.
+Demo-Instanzen laufen mit `APP_ENV=staging` oder `APP_ENV=demo`.
 
 Ein bereits vorhandener Benutzer mit diesem Namen wird nicht verändert.
 

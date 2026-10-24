@@ -183,9 +183,10 @@ class LoginTest extends TestCase
         });
     }
 
-    public function test_demo_mode_is_always_disabled_in_production(): void
+    #[DataProvider('nonDemoEnvironments')]
+    public function test_demo_mode_stays_disabled_outside_the_allowed_environments(?string $appEnv): void
     {
-        $this->withEnvironment(['APP_ENV' => 'production', 'DEMO_MODE' => 'true'], function (): void {
+        $this->withEnvironment(['APP_ENV' => $appEnv, 'DEMO_MODE' => 'true'], function (): void {
             $config = require config_path('app.php');
 
             $this->assertFalse($config['demo']['enabled']);
@@ -201,9 +202,10 @@ class LoginTest extends TestCase
         });
     }
 
-    public function test_demo_mode_can_be_enabled_outside_production(): void
+    #[DataProvider('demoEnvironments')]
+    public function test_demo_mode_can_be_enabled_in_the_allowed_environments(string $appEnv): void
     {
-        $this->withEnvironment(['APP_ENV' => 'staging', 'DEMO_MODE' => 'true'], function (): void {
+        $this->withEnvironment(['APP_ENV' => $appEnv, 'DEMO_MODE' => 'true'], function (): void {
             $config = require config_path('app.php');
 
             $this->assertTrue($config['demo']['enabled']);
@@ -228,6 +230,39 @@ class LoginTest extends TestCase
             'one' => ['1', true],
             'on' => ['on', true],
             'yes' => ['yes', true],
+        ];
+    }
+
+    /**
+     * Provide environment names that must never enable demo mode.
+     *
+     * @return array<string, array{0: string|null}>
+     */
+    public static function nonDemoEnvironments(): array
+    {
+        return [
+            'production' => ['production'],
+            'prod' => ['prod'],
+            'capitalised production' => ['Production'],
+            'live' => ['live'],
+            'padded production' => [' production'],
+            'empty' => [''],
+            'unset' => [null],
+        ];
+    }
+
+    /**
+     * Provide the environment names that may enable demo mode.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function demoEnvironments(): array
+    {
+        return [
+            'local' => ['local'],
+            'testing' => ['testing'],
+            'staging' => ['staging'],
+            'demo' => ['demo'],
         ];
     }
 
