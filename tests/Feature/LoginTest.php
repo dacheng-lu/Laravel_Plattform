@@ -6,6 +6,7 @@ use App\Filament\Pages\Auth\Login;
 use App\Models\User;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Route;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -182,6 +183,30 @@ class LoginTest extends TestCase
             ->assertHasFormErrors(['username']);
 
         $this->assertGuest();
+    }
+
+    public function test_the_public_demo_password_no_longer_works_after_demo_mode_is_switched_off(): void
+    {
+        $this->enableDemoMode();
+
+        $this->seed(DatabaseSeeder::class);
+
+        // Positive control: with demo mode on the seeded account really has the password from the repository.
+        $this->assertTrue(Hash::check('hackathon2026', User::query()->where('username', 'hackathon')->sole()->password));
+
+        config(['lernplattform.demo.enabled' => false]);
+
+        // Seeding again on a real instance locks the demo accounts instead of leaving them with the public password.
+        $this->seed(DatabaseSeeder::class);
+
+        Livewire::test(Login::class)
+            ->fillForm(['username' => 'hackathon', 'password' => 'hackathon2026'])
+            ->call('authenticate')
+            ->assertHasFormErrors(['username']);
+
+        $this->assertGuest();
+        $this->assertDatabaseHas('users', ['username' => 'hackathon']);
+        $this->assertDatabaseHas('users', ['username' => 'schueler']);
     }
 
     /**

@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class CreateOperatorCommandTest extends TestCase
@@ -81,5 +82,48 @@ class CreateOperatorCommandTest extends TestCase
             ->assertExitCode(0);
 
         $this->assertTrue(Hash::check(str_repeat('a', 12), User::query()->where('username', 'plattform-admin')->sole()->password));
+    }
+
+    /**
+     * @return array<string, array{0: string}>
+     */
+    public static function invalidUsernames(): array
+    {
+        return [
+            'blank' => [''],
+            'too short' => ['ab'],
+            'space inside' => ['Admin Name'],
+            'umlaut' => ['müller'],
+            'too long' => [str_repeat('a', 51)],
+        ];
+    }
+
+    #[DataProvider('invalidUsernames')]
+    public function test_an_invalid_username_is_rejected_before_a_password_is_asked(string $username): void
+    {
+        $this->artisan('lernplattform:create-operator', ['username' => $username])->assertExitCode(1);
+
+        $this->assertSame(0, User::query()->count());
+    }
+
+    public function test_the_username_is_stored_in_lower_case(): void
+    {
+        $this->artisan('lernplattform:create-operator', ['username' => 'Plattform.Admin'])
+            ->expectsQuestion('Passwort', 'sicheres-passwort-1')
+            ->expectsQuestion('Passwort wiederholen', 'sicheres-passwort-1')
+            ->assertExitCode(0);
+
+        $this->assertSame('plattform.admin', User::query()->sole()->username);
+    }
+
+    public function test_a_password_longer_than_seventy_two_bytes_is_rejected(): void
+    {
+        // bcrypt would silently cut everything after 72 bytes, so a longer password is refused instead.
+        $this->artisan('lernplattform:create-operator', ['username' => 'plattform-admin'])
+            ->expectsQuestion('Passwort', str_repeat('a', 73))
+            ->expectsQuestion('Passwort wiederholen', str_repeat('a', 73))
+            ->assertExitCode(1);
+
+        $this->assertSame(0, User::query()->count());
     }
 }

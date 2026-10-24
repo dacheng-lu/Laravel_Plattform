@@ -94,6 +94,14 @@ class DemoSeederTest extends TestCase
         }
     }
 
+    public function test_every_seeded_account_is_listed_in_usernames(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+
+        // The lock command for instances without demo mode only knows the accounts from this list.
+        $this->assertEqualsCanonicalizing(DemoSchoolSeeder::USERNAMES, User::query()->pluck('username')->all());
+    }
+
     public function test_there_are_two_demo_schools_and_the_operator_belongs_to_none(): void
     {
         $this->seed(DatabaseSeeder::class);

@@ -30,9 +30,40 @@ use Illuminate\Support\Facades\DB;
  * the platform survive re-seeding. Every demo account gets the password from DEMO_PASSWORD on every run, so changing
  * the variable and seeding again rotates all of them. Outside demo mode (see App\Support\DemoMode) the seeder does
  * nothing at all.
+ *
+ * USERNAMES names every account created here and in DatabaseSeeder, so instances without demo mode can still find the
+ * accounts that were public in the repository (see `php artisan lernplattform:lock-demo-accounts`).
  */
 class DemoSchoolSeeder extends Seeder
 {
+    /**
+     * Every username this seeder (and DatabaseSeeder for the operator) creates.
+     *
+     * @var list<string>
+     */
+    public const array USERNAMES = [
+        'hackathon',
+        'schulleitung',
+        'lehrer',
+        'weber',
+        'schueler',
+        'ben.krueger',
+        'lena.schulz',
+        'jonas.becker',
+        'elif.yilmaz',
+        'noah.wagner',
+        'emma.fischer',
+        'luca.meyer',
+        'paul.richter',
+        'hannah.koch',
+        'leon.wolf',
+        'sophie.neumann',
+        'gym-admin',
+        'gym-lehrer',
+        'gym-schueler1',
+        'gym-schueler2',
+    ];
+
     public function run(): void
     {
         if (! DemoMode::isActive()) {

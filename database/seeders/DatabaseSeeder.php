@@ -7,13 +7,15 @@ use App\Role;
 use App\Support\DemoMode;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\Artisan;
 
 /**
  * Runs on every deploy, so every seeder must be idempotent and must not use factories (no dev dependencies in production).
  *
  * The competency framework is seeded always. The platform operator and the demo schools are seeded only in demo mode
- * (see App\Support\DemoMode); on every other instance they are skipped and the operator is created with
- * `php artisan lernplattform:create-operator <username>` instead.
+ * (see App\Support\DemoMode); on every other instance they are skipped, demo accounts that still carry the password
+ * published in the repository are locked (lernplattform:lock-demo-accounts, nothing is deleted) and the operator is
+ * created with `php artisan lernplattform:create-operator <username>` instead.
  */
 class DatabaseSeeder extends Seeder
 {
@@ -27,7 +29,10 @@ class DatabaseSeeder extends Seeder
         $this->call(CompetencyFrameworkSeeder::class);
 
         if (! DemoMode::isActive()) {
-            $this->command?->warn('Demo data skipped: demo mode is off. Create the platform operator with: php artisan lernplattform:create-operator <username>');
+            // Through the kernel, so locking also works when the seeder runs from another seeder or a test.
+            Artisan::call('lernplattform:lock-demo-accounts');
+
+            $this->command?->warn('Demo data skipped: demo mode is off. Demo accounts with the public demo password were locked. Create the platform operator with: php artisan lernplattform:create-operator <username>');
 
             return;
         }
