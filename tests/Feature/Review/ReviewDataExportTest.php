@@ -62,11 +62,12 @@ class ReviewDataExportTest extends TestCase
 
         $export = PersonalDataExport::for($student, $admin);
 
-        // The administration does receive the hand-in (they may see it anyway) …
-        $this->assertCount(1, $export['abgaben']);
-        $this->assertSame('Weg/Schritt falsch', $export['abgaben'][0]['antworten'][0]['fehlerart']);
+        // The export ran and holds the student's account data …
+        $this->assertSame($student->name, $export['konto']['name']);
 
         // … but never the self-assessments: no key, and none of the counter names anywhere in the export.
+        // The hand-in is not part of this export either: a school administration may not read a student's
+        // submission (SubmissionPolicy), so PersonalDataExport leaves the answers out as well.
         $this->assertArrayNotHasKey('wiederholen', $export);
         $json = json_encode($export, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
@@ -74,11 +75,17 @@ class ReviewDataExportTest extends TestCase
             $this->assertStringNotContainsString($forbidden, $json);
         }
 
-        // Positivkontrolle: the student's own export of the very same data does contain them.
-        $own = json_encode(PersonalDataExport::for($student), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+        // Positivkontrolle: the student's own export of the very same data does contain the repeat state.
+        $own = PersonalDataExport::for($student);
+
+        $this->assertArrayHasKey('wiederholen', $own);
+        $this->assertCount(1, $own['wiederholen']);
+        $this->assertSame(3, $own['wiederholen'][0]['sofort_gewusst']);
+
+        $ownJson = json_encode($own, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
         foreach (['sofort_gewusst', 'mit_muehe', 'nicht_gewusst'] as $counter) {
-            $this->assertStringContainsString($counter, $own);
+            $this->assertStringContainsString($counter, $ownJson);
         }
     }
 
