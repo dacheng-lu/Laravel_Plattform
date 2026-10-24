@@ -3,6 +3,10 @@
 namespace Tests\Feature\Showcase;
 
 use App\Filament\Pages\Statistics;
+use App\Livewire\Statistics\CompetencyAveragesChart;
+use App\Livewire\Statistics\ExplainItUsageChart;
+use App\Livewire\Statistics\HandInRateChart;
+use App\Livewire\Statistics\MistakeTypesChart;
 use App\Livewire\Statistics\StatisticsChart;
 use App\Livewire\Statistics\UnderstandingTrendChart;
 use App\Models\Lesson;
@@ -40,6 +44,21 @@ class ShowcaseFixtureTest extends TestCase
      * @var list<string>
      */
     private const array TABLES = ['schools', 'users', 'school_classes', 'competencies', 'lessons', 'questions', 'lesson_user', 'submissions', 'answers', 'review_items', 'explanation_sessions', 'explanation_messages', 'consent_forms', 'recording_consents'];
+
+    /**
+     * The content a second import must not touch, table by table: the columns that carry what the demo shows.
+     *
+     * @var array<string, list<string>>
+     */
+    private const array FINGERPRINT_COLUMNS = [
+        'users' => ['id', 'username', 'name', 'password', 'role', 'school_class_id'],
+        'lessons' => ['id', 'notes', 'summary', 'held_on', 'published_at', 'due_on'],
+        'submissions' => ['id', 'summary', 'understanding_score', 'created_at', 'evaluated_at'],
+        'answers' => ['id', 'answer', 'score', 'mistake_type'],
+        'review_items' => ['id', 'box', 'due_on', 'knew_count'],
+        'explanation_sessions' => ['id', 'finished_at'],
+        'recording_consents' => ['id', 'granted_at', 'revoked_at'],
+    ];
 
     protected function setUp(): void
     {
@@ -105,6 +124,7 @@ class ShowcaseFixtureTest extends TestCase
         $this->importShowcase();
 
         $countsAfterFirstRun = $this->rowCounts();
+        $fingerprintAfterFirstRun = $this->contentFingerprint();
 
         // Positive control: the first run did fill the demo school, so an unchanged row count means something.
         $this->assertGreaterThan(0, $countsAfterFirstRun['lessons']);
@@ -112,6 +132,15 @@ class ShowcaseFixtureTest extends TestCase
         $this->importShowcase();
 
         $this->assertSame($countsAfterFirstRun, $this->rowCounts(), 'Ein zweiter Import legt keine Zeile an und ändert keine.');
+        $this->assertSame($fingerprintAfterFirstRun, $this->contentFingerprint(), 'Ein zweiter Import ändert keinen Inhalt der Demo-Daten.');
+
+        // Positive control for the fingerprint itself: one changed lesson note has to show up.
+        $lesson = Lesson::query()->orderBy('id')->firstOrFail();
+        $lesson->forceFill(['notes' => $lesson->notes.' (nachträglich geändert)'])->save();
+
+        $changed = $this->contentFingerprint()['lessons'];
+
+        $this->assertNotSame($fingerprintAfterFirstRun['lessons'], $changed, 'Der Fingerabdruck erkennt eine geänderte Stunde.');
     }
 
     public function test_the_statistics_page_has_figures_for_the_demo_teacher(): void
@@ -144,11 +173,23 @@ class ShowcaseFixtureTest extends TestCase
             ->assertOk()
             ->assertDontSee('wire:poll');
 
+        // Every chart of the page delivers labels and values for the demo class.
+        foreach ([CompetencyAveragesChart::class, ExplainItUsageChart::class, HandInRateChart::class, MistakeTypesChart::class, UnderstandingTrendChart::class] as $chart) {
+            $component = Livewire::actingAs($teacher)
+                ->test($chart, ['schoolClassId' => $schoolClass->getKey(), 'subject' => null, 'weeks' => 10])
+                ->assertOk()
+                ->instance();
+
+            $this->assertChartHasValues($chart, (new ReflectionMethod($component, 'getCachedData'))->invoke($component));
+        }
+
         $statistics = ClassStatistics::forViewer($teacher, $schoolClass->getKey());
 
         $weeks = array_filter($statistics->understandingTrend(), fn (?int $average): bool => $average !== null);
+        $usage = array_filter($statistics->explainItUsage(), fn (?int $sessions): bool => $sessions !== null);
 
         $this->assertGreaterThanOrEqual(6, count($weeks), 'Der Verlauf der Demo-Klasse zeigt mindestens sechs Wochen mit Werten.');
+        $this->assertGreaterThanOrEqual(3, count($usage), 'Die Nutzung von "Erklär\'s mir" zeigt mindestens drei Wochen mit Werten.');
         $this->assertGreaterThanOrEqual(3, count($statistics->mistakeTypes()), 'Die Fehlerarten der Demo-Klasse zeigen mindestens drei Fächer.');
         $this->assertGreaterThanOrEqual(5, count($statistics->competencyAverages()), 'Die Demo-Klasse zeigt mindestens fünf Kompetenzen.');
         $this->assertGreaterThanOrEqual(8, count($statistics->handInRates()), 'Die Demo-Klasse zeigt mindestens acht Hausaufgaben.');
@@ -192,13 +233,13 @@ class ShowcaseFixtureTest extends TestCase
             ->pluck('name')
             ->merge(array_column($data['students'], 'name'))
             ->map(fn (string $name): string => explode(' ', $name)[0])
-            ->filter(fn (string $firstName): bool => mb_strlen($firstName) >= 4)
+            ->filter(fn (string $firstName): bool => mb_strlen($firstName) >= 3)
             ->unique()
             ->values();
 
         $texts = $this->generatedTexts($data);
 
-        $this->assertGreaterThanOrEqual(40, $firstNames->count(), 'Genug lange Vornamen, damit die Prüfung etwas finden kann.');
+        $this->assertGreaterThanOrEqual(40, $firstNames->count(), 'Genug Vornamen, damit die Prüfung etwas finden kann.');
         $this->assertGreaterThanOrEqual(1000, count($texts), 'Genug generierte Texte, damit die Prüfung etwas finden kann.');
 
         // Positive control: the same pattern does find a name that stands in a sentence.
@@ -259,9 +300,51 @@ class ShowcaseFixtureTest extends TestCase
 
     private function importShowcase(): void
     {
+        $startedAt = microtime(true);
+
         $exitCode = Artisan::call('lernplattform:seed-showcase');
 
+        $duration = microtime(true) - $startedAt;
+
         $this->assertSame(Command::SUCCESS, $exitCode, Artisan::output());
+        $this->assertLessThan(60.0, $duration, sprintf('Der Import der Vorführdatei dauert %.1f s und muss unter 60 s bleiben.', $duration));
+    }
+
+    /**
+     * A chart renders only with labels and at least one value; an empty result would leave the page with an empty chart.
+     *
+     * @param  class-string<StatisticsChart>  $chart
+     * @param  array<string, mixed>  $data
+     */
+    private function assertChartHasValues(string $chart, array $data): void
+    {
+        $this->assertNotEmpty($data['labels'] ?? [], "Der Chart {$chart} hat Beschriftungen.");
+
+        $values = [];
+
+        foreach ($data['datasets'] ?? [] as $dataset) {
+            foreach ($dataset['data'] ?? [] as $value) {
+                $values[] = $value;
+            }
+        }
+
+        $this->assertNotEmpty(array_filter($values, fn (mixed $value): bool => $value !== null), "Der Chart {$chart} zeigt mindestens einen Wert.");
+    }
+
+    /**
+     * The content of the tables the demo shows, one hash per table, read in a fixed order.
+     *
+     * @return array<string, string>
+     */
+    private function contentFingerprint(): array
+    {
+        $fingerprint = [];
+
+        foreach (self::FINGERPRINT_COLUMNS as $table => $columns) {
+            $fingerprint[$table] = sha1(DB::table($table)->orderBy('id')->get($columns)->toJson());
+        }
+
+        return $fingerprint;
     }
 
     /**
@@ -326,6 +409,10 @@ class ShowcaseFixtureTest extends TestCase
                     $texts[] = (string) $submission['feedback'];
                 }
 
+                foreach ($submission['gaps'] as $gap) {
+                    $texts[] = (string) $gap;
+                }
+
                 foreach ($submission['answers'] as $answer) {
                     $texts[] = (string) $answer['answer'];
 
@@ -350,11 +437,12 @@ class ShowcaseFixtureTest extends TestCase
     }
 
     /**
-     * The first name as a whole word, in the spelling of the file.
+     * The first name as a whole word, in the spelling of the file: no letter before or after it, so "Mia" is found in
+     * "Mia schreibt" but not in "Mias" or "Familie".
      */
     private function namePattern(string $firstName): string
     {
-        return '/\b'.preg_quote($firstName, '/').'\b/u';
+        return '/(?<!\pL)'.preg_quote($firstName, '/').'(?!\pL)/u';
     }
 
     /**
