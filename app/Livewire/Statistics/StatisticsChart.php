@@ -22,6 +22,12 @@ abstract class StatisticsChart extends ChartWidget
     protected ?string $maxHeight = '280px';
 
     /**
+     * The figures behind the charts change only when the page's filters change, and the page re-renders the charts
+     * itself: Filament's default of five seconds would query the aggregates again for nothing.
+     */
+    protected ?string $pollingInterval = null;
+
+    /**
      * The aggregates for the current properties, or null while no class is chosen. A class the viewer may not see
      * aborts with 403 inside ClassStatistics::forViewer().
      */
