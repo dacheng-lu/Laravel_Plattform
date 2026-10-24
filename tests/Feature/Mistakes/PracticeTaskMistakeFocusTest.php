@@ -95,6 +95,14 @@ class PracticeTaskMistakeFocusTest extends TestCase
             $this->assertCount(1, $applications);
         }
 
+        // Der Umbau für „concept“ nimmt der Aufgabe nie ihren Transfer: concept und procedure behalten ihre
+        // Anwendungsfrage (die erste Frage wird nur umgebaut, wenn sie keine Anwendungsfrage ist).
+        foreach (['concept' => $concept, 'procedure' => $procedure] as $variant => $draft) {
+            $applications = array_filter($draft['questions'], fn (array $question): bool => $question['type'] === QuestionType::Application);
+
+            $this->assertGreaterThanOrEqual(1, count($applications), $variant);
+        }
+
         // Positivkontrolle: no mistake type (missing argument or explicit null) leaves the draft exactly as it was.
         $this->assertSame($withoutArgument, $explicitNull);
         $this->assertSame(QuestionType::Comprehension, $withoutArgument['questions'][0]['type']);

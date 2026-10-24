@@ -93,6 +93,43 @@ class PracticeTaskMistakeTypeTest extends TestCase
         $this->assertSame(1, Lesson::query()->where('practice_competency_id', $this->competency->id)->count());
     }
 
+    public function test_the_kill_switch_hands_no_mistake_type_to_the_draft(): void
+    {
+        $this->classify($this->miaAnswer, MistakeType::Procedure);
+        $this->classify($this->answerFor($this->miaAnswer->submission, 25), MistakeType::Procedure);
+        $this->classify($this->benAnswer, MistakeType::Concept);
+
+        $received = [];
+        $this->mock(LessonAssistant::class, function (MockInterface $mock) use (&$received): void {
+            $mock->shouldReceive('draftPracticeTask')
+                ->twice()
+                ->andReturnUsing(function (Competency $competency, string $subject, Collection $sourceLessons, array $gaps, ?MistakeType $mistakeType = null) use (&$received): array {
+                    $received[] = $mistakeType;
+
+                    return $this->draft();
+                });
+        });
+
+        // Positivkontrolle: eingeschaltet bekommt der Entwurf die häufigste Fehlerart der Gruppe.
+        config()->set('lernplattform.mistakes.enabled', true);
+
+        Livewire::actingAs($this->teacher)
+            ->test(LearningProgress::class)
+            ->callAction('createPracticeTask', data: ['students' => [$this->mia->id, $this->ben->id], 'distribute' => false], arguments: ['competency' => $this->competency->id])
+            ->assertHasNoActionErrors();
+
+        // Kill-Switch: ausgeschaltet bekommt er keine, obwohl die Antworten eingeordnet gespeichert sind.
+        config()->set('lernplattform.mistakes.enabled', false);
+
+        Livewire::actingAs($this->teacher)
+            ->test(LearningProgress::class)
+            ->callAction('createPracticeTask', data: ['students' => [$this->mia->id, $this->ben->id], 'distribute' => false], arguments: ['competency' => $this->competency->id])
+            ->assertHasNoActionErrors();
+
+        $this->assertSame([MistakeType::Procedure, null], $received);
+        $this->assertSame(2, Lesson::query()->where('practice_competency_id', $this->competency->id)->count());
+    }
+
     public function test_without_classified_answers_the_draft_gets_no_mistake_type(): void
     {
         $received = MistakeType::Empty;

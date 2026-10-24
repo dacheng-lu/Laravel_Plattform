@@ -17,6 +17,12 @@ use App\Models\Question;
  *
  * The confidences 70 and 65 deliberately sit above the default `min_confidence` of 0.6, so the offline rules apply
  * with the default configuration.
+ *
+ * Known limit of the word-stem heuristic: two words count as the same when their first five letters match. Synonyms and
+ * abbreviations that share no stem therefore look unrelated – "O2" against "Sauerstoff", "H2O" against "Wasser",
+ * "Zähler" against "Numerator". A correct answer written that way can be labelled "off topic" (confidence 65). The
+ * result is only a hint next to the answer: it changes no score, is marked as an AI hint that can be wrong, and the
+ * teacher's own correction has priority.
  */
 class DemoMistakeClassifier implements MistakeClassifier
 {

@@ -350,6 +350,66 @@ class MistakeIntegrationTest extends TestCase
         $this->assertSame(2, $task->questions()->count());
     }
 
+    public function test_the_kill_switch_keeps_the_ai_practice_task_neutral(): void
+    {
+        config([
+            'services.anthropic.enabled' => true,
+            'services.anthropic.key' => 'test-key',
+            'services.anthropic.model' => 'claude-opus-5-5',
+        ]);
+
+        Http::fake(['api.anthropic.com/*' => $this->messageResponse([
+            'summary' => 'Hier übst du das Kürzen Schritt für Schritt.',
+            'questions' => [
+                ['type' => 'comprehension', 'prompt' => 'Was bedeutet Kürzen?', 'expected_answer' => 'Teilen durch denselben Faktor.'],
+                ['type' => 'application', 'prompt' => 'Kürze 12/18 in Schritten.', 'expected_answer' => 'Durch 6 teilen ergibt 2/3.'],
+            ],
+        ])]);
+
+        $student = User::factory()->student($this->schoolClass)->create([
+            'name' => 'Zacharias Quellenberg',
+            'username' => 'zquellenberg',
+        ]);
+        $competency = $this->fractionsCompetency();
+        $lesson = $this->sourceLesson($student, $competency, 'Brüche kürzen üben', MistakeType::Procedure);
+
+        // Positivkontrolle: eingeschaltet nennt der Auftrag die häufigste Fehlerart der Gruppe.
+        config()->set('lernplattform.mistakes.enabled', true);
+        PracticeTasks::create(
+            $this->teacher,
+            $this->schoolClass,
+            $competency,
+            ['student_ids' => [$student->getKey()], 'lesson_ids' => [$lesson->getKey()]],
+            [$student->getKey()],
+        );
+
+        // Kill-Switch: ausgeschaltet nennt der Auftrag keine Fehlerart, obwohl die Antwort eingeordnet gespeichert ist.
+        config()->set('lernplattform.mistakes.enabled', false);
+        PracticeTasks::create(
+            $this->teacher,
+            $this->schoolClass,
+            $competency,
+            ['student_ids' => [$student->getKey()], 'lesson_ids' => [$lesson->getKey()]],
+            [$student->getKey()],
+        );
+
+        $texts = Http::recorded()
+            ->map(fn (array $pair): string => collect($pair[0]->data()['messages'][0]['content'])
+                ->where('type', 'text')
+                ->pluck('text')
+                ->implode("\n"))
+            ->values();
+
+        $this->assertCount(2, $texts);
+        $this->assertStringContainsString('Häufigste Fehlerart der Gruppe: Weg/Schritt falsch.', $texts[0]);
+        // Weder der Hinweis noch das Label: der Auftrag weiß nichts von Fehlerarten.
+        $this->assertStringNotContainsString('Fehlerart', $texts[1]);
+        $this->assertStringNotContainsString('Weg/Schritt falsch', $texts[1]);
+        // Die Aufgabe selbst bleibt vollständig – der Schalter betrifft nur den Hinweis.
+        $this->assertStringContainsString('Kompetenz: Zahlen – Brüche kürzen', $texts[1]);
+        $this->assertSame(2, Lesson::query()->where('practice_competency_id', $competency->getKey())->count());
+    }
+
     /**
      * One hand-in through the real page: write a summary, answer the questions, hand in.
      */

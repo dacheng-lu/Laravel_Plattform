@@ -15,10 +15,11 @@ use App\Models\Submission;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Actions\ViewAction;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
-use Throwable;
 
 /**
  * The teacher may correct the mistake type of an answer in the submission view (spec AC-6). The correction is a hint:
@@ -372,7 +373,10 @@ class MistakeCorrectionTest extends TestCase
         $this->assertNull($foreignAnswer->mistake_source);
         $this->assertSame(15, $foreignAnswer->score);
 
-        // A teacher of another school really executes the action: it is refused and writes nothing.
+        // A teacher of another school really executes the action: the page already refuses the lesson, so the attempt
+        // ends in a 403 (or the policy's AuthorizationException) and writes nothing.
+        $this->assertFalse($foreignTeacher->can('view', $this->lesson));
+
         $this->attemptCorrectionAs($foreignTeacher);
 
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
@@ -381,7 +385,8 @@ class MistakeCorrectionTest extends TestCase
         $this->assertSame(MistakeSource::Demo, $this->otherAnswer->mistake_source);
 
         // Fehlerpfad im Livewire-Pfad: the student moved to another school, so the lesson's own teacher may not see
-        // them any more – the component does not render the action at all, and a forced call writes nothing.
+        // them any more – the component does not render the action and the policy denies it, so a forged request has no
+        // action to mount. The stored state stays as it was.
         $ownClassId = $this->student->school_class_id;
         $ownSchoolId = $this->student->school_id;
         $this->student->update(['school_class_id' => $foreignClass->id, 'school_id' => $foreignClass->school_id]);
@@ -393,11 +398,10 @@ class MistakeCorrectionTest extends TestCase
             ->assertSee('Ansehen')
             ->assertDontSee('Fehlerart korrigieren');
 
-        $this->attemptCorrectionAs($this->teacher);
-
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
-        // The unclassified answer is still unclassified – the refused call did not touch it either.
+        $this->assertSame(MistakeType::Procedure, $this->otherAnswer->refresh()->mistake_type);
+        // The unclassified answer is still unclassified.
         $this->assertNull($this->plainAnswer->refresh()->mistake_type);
         $this->assertNull($this->plainAnswer->mistake_source);
 
@@ -420,8 +424,8 @@ class MistakeCorrectionTest extends TestCase
     }
 
     /**
-     * Tries the correction as the given user: Livewire answers with 403, refuses to mount the hidden action or does
-     * nothing at all – each of them is the refusal this test asserts, and the caller checks that nothing was written.
+     * Tries the correction as the given user. Only a refusal counts here: the policy's AuthorizationException or the
+     * 403 of the page it belongs to. Every other exception is a real error and is passed on.
      */
     private function attemptCorrectionAs(User $viewer): void
     {
@@ -435,8 +439,10 @@ class MistakeCorrectionTest extends TestCase
                         $this->plainAnswer->getKey() => '',
                     ],
                 ]);
-        } catch (Throwable) {
-            // Refused either way: the caller asserts that nothing was written.
+        } catch (AuthorizationException) {
+            // Refused by the policy.
+        } catch (HttpExceptionInterface $refusal) {
+            $this->assertSame(403, $refusal->getStatusCode(), 'A refusal by the platform is a 403.');
         }
     }
 }

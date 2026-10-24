@@ -103,6 +103,29 @@ class TeacherMistakeViewTest extends TestCase
             ->assertDontSee('1× Am Thema vorbei (KI-Hinweis, kann falsch sein)');
     }
 
+    public function test_the_kill_switch_hides_the_distribution(): void
+    {
+        // Kill-Switch: ausgeschaltet zeigt der Lernstand keine Verteilung, auch wenn Antworten eingeordnet sind.
+        config()->set('lernplattform.mistakes.enabled', false);
+
+        Livewire::actingAs($this->teacher)
+            ->test(LearningProgress::class)
+            ->assertOk()
+            ->assertSee('Brüche kürzen')
+            ->assertDontSee('Weg/Schritt falsch')
+            ->assertDontSee('Grundidee noch unklar')
+            ->assertDontSee('KI-Hinweis, kann falsch sein');
+
+        // Positivkontrolle: eingeschaltet steht sie da.
+        config()->set('lernplattform.mistakes.enabled', true);
+
+        Livewire::actingAs($this->teacher)
+            ->test(LearningProgress::class)
+            ->assertOk()
+            ->assertSee('3× Weg/Schritt falsch')
+            ->assertSee('KI-Hinweis, kann falsch sein');
+    }
+
     public function test_cross_school_sees_nothing(): void
     {
         // Positivkontrolle: the class teacher sees the distribution (see test_distribution_per_competency).

@@ -34,7 +34,8 @@ class PracticeTasks
      * Nothing is stored when the assistant fails. The callers authorize and validate the students.
      * The draft draws on ordinary lessons only (never on an earlier Förderaufgabe) and on the notes of those lessons
      * the teacher may view: of a colleague's lesson, only its topic and date reach the draft and the stored notes.
-     * It also gets the most common mistake type the supported students made in that competency, if one was classified.
+     * It also gets the most common mistake type the supported students made in that competency, if one was classified
+     * and the mistake types are switched on (`lernplattform.mistakes.enabled`).
      *
      * @param  array{student_ids: list<int>, lesson_ids: list<int>}  $support  see LearningInsights::competencySupport()
      * @param  list<int>  $studentIds  students of the class who receive the task
@@ -72,7 +73,13 @@ class PracticeTasks
             ->values()
             ->all();
 
-        $draft = app(LessonAssistant::class)->draftPracticeTask($competency, $subject, $sourceLessons, $gaps, MistakeInsights::mostCommon($support['student_ids'], $competency->getKey(), $sourceLessons->modelKeys()));
+        // The kill switch reaches the draft as well: with the mistake types switched off, no stored classification is
+        // handed over, so the request names no mistake type at all.
+        $mistakeType = (bool) config('lernplattform.mistakes.enabled')
+            ? MistakeInsights::mostCommon($support['student_ids'], $competency->getKey(), $sourceLessons->modelKeys())
+            : null;
+
+        $draft = app(LessonAssistant::class)->draftPracticeTask($competency, $subject, $sourceLessons, $gaps, $mistakeType);
 
         return DB::transaction(function () use ($teacher, $schoolClass, $competency, $subject, $sourceLessons, $draft, $studentIds, $dueOn): Lesson {
             $lesson = Lesson::query()->create([

@@ -28,6 +28,7 @@
     <li>Name, Benutzername, Klasse und auf Wunsch eine E-Mail-Adresse. Das Passwort wird nur verschlüsselt (als Hash) gespeichert.</li>
     <li>Was Ihr Kind abgibt: Zusammenfassungen, Antworten auf Hausaufgaben und Gespräche mit der Übungsfigur „Erklär’s mir“.</li>
     <li>Das Ergebnis der Auswertung: ein Verständniswert von 0 bis 100 mit Rückmeldung. Er ist ein Hinweis, wo Unterstützung nötig sein könnte, und keine Note.</li>
+    <li>Bei einer Antwort, die noch nicht ganz richtig ist, kann die Plattform einen Hinweis zur Fehlerart speichern, zum Beispiel „Grundidee noch unklar“ oder „Weg/Schritt falsch“, dazu die Quelle des Hinweises (Regeln der Plattform, KI oder Lehrkraft) und, wenn eine KI eingeordnet hat, wie sicher sie sich war. Der Hinweis ist keine Note, ändert keine Punktzahl und erscheint nicht im Bericht für das Elterngespräch.</li>
     <li>Technische Daten, die beim Anmelden anfallen, etwa die Sitzungskennung und die IP-Adresse.</li>
 </ul>
 <p>Die E-Mail-Adresse ist freiwillig. Ohne Name und Benutzername kann Ihr Kind die Plattform nicht nutzen. Ob die Nutzung im Unterricht verbindlich ist, entscheidet die Schule.</p>
@@ -44,7 +45,7 @@
 <h3>5. Künstliche Intelligenz</h3>
 @if ($aiEnabled)
     <p>
-        Die Plattform wertet mit Hilfe von KI aus, um Hausaufgaben zu entwerfen, Antworten einzuschätzen und das Gespräch in „Erklär’s mir“ zu führen. Dafür werden {{ $aiData }} an Anthropic PBC in den USA übermittelt. Name und Benutzerkennung des Kontos werden nicht mitgeschickt. Namen, die in einem Text, einem Gespräch oder auf einem Arbeitsblatt stehen, werden aber nicht entfernt. Bitte nennen Sie und Ihr Kind deshalb keine Namen anderer Personen. Für die Übermittlung in die USA sind geeignete Garantien nach Art. 44 ff. DSGVO nötig. Grundlage: {{ $blank }} Eine Kopie erhalten Sie auf Anfrage bei der Schule.
+        Die Plattform wertet mit Hilfe von KI aus, um Hausaufgaben zu entwerfen, Antworten einzuschätzen und das Gespräch in „Erklär’s mir“ zu führen. Dafür werden {{ $aiData }} an Anthropic PBC in den USA übermittelt. Name und Benutzerkennung des Kontos werden nicht mitgeschickt. Namen, die in einem Text, einem Gespräch oder auf einem Arbeitsblatt stehen, werden aber nicht entfernt. Bitte nennen Sie und Ihr Kind deshalb keine Namen anderer Personen. Für die Fehlerart einer Antwort gehen Frage, Erwartungshorizont und Antworttext mit; die Namen der Klasse und der Lehrkraft ersetzt die Plattform vorher durch Platzhalter. Hochgeladene Arbeitsblätter gehen unverändert mit und können Namen enthalten. Für die Übermittlung in die USA sind geeignete Garantien nach Art. 44 ff. DSGVO nötig. Grundlage: {{ $blank }} Eine Kopie erhalten Sie auf Anfrage bei der Schule.
     </p>
 @else
     <p>

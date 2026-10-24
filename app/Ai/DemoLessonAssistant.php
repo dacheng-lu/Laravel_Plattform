@@ -206,14 +206,16 @@ class DemoLessonAssistant implements LessonAssistant
     }
 
     /**
-     * The first question becomes a comprehension question after a short explanation of the idea.
+     * The first question becomes a comprehension question after a short explanation of the idea. The one application
+     * question of the task stays: if the list already starts with it, nothing is rewritten, because the draft would
+     * otherwise lose its only transfer task (and the explanation prompt would sit on the wrong question type).
      *
      * @param  list<array<string, mixed>>  $questions
      * @return list<array<string, mixed>>
      */
     private function explanationFirst(array $questions, string $prompt): array
     {
-        if ($questions === []) {
+        if ($questions === [] || $questions[0]['type'] === QuestionType::Application) {
             return $questions;
         }
 

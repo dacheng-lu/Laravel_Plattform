@@ -502,8 +502,19 @@
     <p>
         <strong>Fehlerart:</strong> Bei einer Antwort, die nicht ganz richtig ist, kann die Plattform zusätzlich die
         Fehlerart speichern: Grundidee noch unklar, Weg/Schritt falsch, unvollständig, am Thema vorbei oder kein
-        Versuch. Dazu hält sie die Quelle der Einordnung fest (Demo-Regeln, KI oder Lehrkraft). Die Fehlerart ist nur
-        ein Hinweis zur Antwort, nicht zur Person: Sie ändert keine Punktzahl und erscheint nicht im Elternbericht.
+        Versuch. Das geschieht nur bei Antworten unter der eingestellten Punktgrenze und nur, wenn die Einordnung
+        sicher genug ist; eine unsichere Einordnung bleibt leer. Zur Fehlerart hält die Plattform die Quelle der
+        Einordnung fest (Demo-Regeln, KI oder Lehrkraft) und, wenn eine KI eingeordnet hat, deren Sicherheit von 0 bis
+        100. Die Fehlerart ist nur ein Hinweis zur Antwort, nicht zur Person:
+        Sie ändert keine Punktzahl und erscheint nicht im Elternbericht.
+        Die Lehrkraft kann sie korrigieren oder zurücknehmen; ihre Einordnung hat Vorrang. Die Schülerin oder der
+        Schüler sieht die eigenen Hinweise in der Rückmeldung zur Hausaufgabe. Die Lehrkraft sieht für die Klassen, die
+        sie leiten oder unterrichten, die Verteilung je Kompetenz und den Einzelhinweis neben der Antwort,
+        gekennzeichnet als „KI-Hinweis, kann falsch sein“. Andere Schüler:innen und andere Schulen sehen nichts. Für
+        eine Einordnung durch die KI gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter (Abschnitt 7);
+        die Namen der Klasse und der Lehrkraft ersetzt die Plattform vorher durch Platzhalter, hochgeladene
+        Arbeitsblätter gehen unverändert mit. Die Fehlerart wird mit der Antwort gelöscht, die Datenauskunft im Profil
+        nennt sie samt Quelle.
     </p>
     <p>
         Aus den gespeicherten Ergebnissen berechnet die Plattform eine Übersicht zum Lernstand und möglichem

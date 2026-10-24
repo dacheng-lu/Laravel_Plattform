@@ -42,6 +42,13 @@
             'retention' => "Automatische Löschung nach {$schoolYearsKept} Schuljahren (das laufende eingerechnet).",
         ],
         [
+            'title' => 'Fehlerart einer Antwort (Hinweis)',
+            'data' => 'Fehlerart (Grundidee noch unklar, Weg/Schritt falsch, unvollständig, am Thema vorbei, kein Versuch), Sicherheit der Einordnung von 0 bis 100 (nur bei einer Einordnung durch KI) und Quelle (Demo-Regeln, KI oder Lehrkraft). Gespeichert wird nur bei Antworten unter der eingestellten Punktgrenze und nur oberhalb der Mindestsicherheit; unsichere Einordnungen werden nicht gespeichert. Ordnet die KI ein, gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter, mit den Namen der Klasse und der Lehrkraft vorher durch Platzhalter ersetzt; hochgeladene Arbeitsblatt-Dateien gehen unverändert mit.',
+            'people' => 'Schüler:innen',
+            'access' => 'Die Schüler:in sieht die eigenen Hinweise in der Rückmeldung zur Hausaufgabe. Die Lehrkraft der Klasse sieht die Verteilung je Kompetenz und den Einzelhinweis neben der Antwort, gekennzeichnet als „KI-Hinweis, kann falsch sein“, sowie die von einer Lehrkraft eingeordneten Fälle. Nie andere Schüler:innen, nie eine andere Schule.',
+            'retention' => "Mit der Antwort, also automatisch nach {$schoolYearsKept} Schuljahren (das laufende eingerechnet). Die Lehrkraft kann eine Fehlerart jederzeit korrigieren oder zurücknehmen.",
+        ],
+        [
             'title' => 'Tonaufnahme einer Stunde (Aufnahme-Modul, optional)',
             'data' => 'Stimmen und Äußerungen aller, die im Raum sprechen. Dazu Beginn, Dauer, aufnehmende Lehrkraft und der Zeitpunkt der Bestätigung vor der Aufnahme. Gesprochenes kann zufällig auch besondere Kategorien nach Art. 9 DSGVO berühren (Gesundheit, Herkunft, Religion, Familie).',
             'people' => 'Schüler:innen (minderjährig), Lehrkraft, weitere anwesende Personen',
@@ -121,6 +128,7 @@
                 'Es gibt keine automatisierte Entscheidung im Sinne von Art. 22 DSGVO. Ergebnisse sind als Hinweise gekennzeichnet.',
                 'Der Verständniswert ist ausdrücklich keine Note. Die Lehrkraft entscheidet, was daraus folgt.',
                 'Die Plattform weist nach der Transkription darauf hin, das Transkript vor der Auswertung zu lesen; verbindlich macht das die Dienstanweisung. Die Auswertung der Aufnahme nutzt nur Text.',
+                'Die Fehlerart einer Antwort ist ein Hinweis zur Antwort, nicht zur Person: Sie ändert weder Punktzahl noch Note, erscheint nicht im Elternbericht und wird unterhalb der eingestellten Mindestsicherheit gar nicht gespeichert. Die Lehrkraft kann sie korrigieren oder zurücknehmen; ihre Einordnung hat Vorrang.',
                 'KI-Auswertung und Server-Transkription sind ab Werk ausgeschaltet.',
             ],
         ],
@@ -204,6 +212,7 @@
             'KI-Auswertung und Server-Transkription sind ab Werk ausgeschaltet und nur durch den Betreiber einzuschalten. Die Datenschutzerklärung wird vorher ergänzt.',
             'Audio erreicht nie die KI. Die Live-Texterkennung läuft nur lokal im Browser.',
             'Bei der Auswertung einer Aufnahme und beim Übernehmen in die Notizen werden Namen der Klasse und der Lehrkraft durch Platzhalter ersetzt (Pseudonymisierung, keine Anonymisierung). Die übrigen KI-Funktionen senden Texte und Arbeitsblatt-Dateien unverändert.',
+            'Für die Fehlerart einer Antwort wertet die Plattform Frage, Erwartungshorizont und Antworttext aus. Die Namen der Klasse und der Lehrkraft ersetzt sie dabei vorher durch Platzhalter; hochgeladene Arbeitsblatt-Dateien gehen unverändert mit.',
             'Keine automatisierten Einzelentscheidungen. Nach der Transkription weist die Plattform darauf hin, das Transkript vor der Auswertung zu lesen; verbindlich macht das die Dienstanweisung. Der Verständniswert ist keine Note.',
         ],
         'Technik' => [
