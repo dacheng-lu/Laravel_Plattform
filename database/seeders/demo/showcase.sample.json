@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "school_number": "4711",
+  "teachers": [
+    {"username": "selin.kaya", "name": "Selin Kaya"}
+  ],
+  "classes": [
+    {"name": "8a", "teacher": "selin.kaya"}
+  ],
+  "students": [
+    {"username": "aylin.demir", "name": "Aylin Demir", "class": "8a"},
+    {"username": "finn.hartmann", "name": "Finn Hartmann", "class": "8a"},
+    {"username": "marie.vogel", "name": "Marie Vogel", "class": "8a"},
+    {"username": "tim.berger", "name": "Tim Berger", "class": "7b"}
+  ],
+  "lessons": [
+    {
+      "key": "8a-ge-01",
+      "class": "8a",
+      "teacher": "selin.kaya",
+      "subject": "Geschichte",
+      "topic": "Das Lehnswesen im Mittelalter",
+      "held_days_ago": 20,
+      "published_days_ago": 20,
+      "published_time": "15:10",
+      "due_days_ago": 15,
+      "notes": "Geschichte 8a – Lehnswesen. Einstieg mit Bildquelle: Lehnseid. Tafelbild Lehnspyramide (König – Kronvasallen – Untervasallen – Bauern). Begriffe Lehen, Vasall, Treueeid. HA auf der Plattform.",
+      "summary": "Im Lehnswesen vergab der König Land (ein Lehen) an Adlige. Diese Vasallen schworen ihm dafür Treue und Kriegsdienst. Sie gaben Teile des Landes an Untervasallen weiter. Die Bauern bewirtschafteten das Land und mussten Abgaben leisten.",
+      "practice_competency": null,
+      "students": ["aylin.demir", "finn.hartmann", "marie.vogel"],
+      "questions": [
+        {"type": "comprehension", "competency": {"subject": "Geschichte", "name": "Sachkompetenz"},
+         "prompt": "Erkläre, was ein Lehen ist und welche Pflichten ein Vasall hatte.",
+         "expected_answer": "Ein Lehen ist geliehenes Land, das ein Lehnsherr einem Vasallen überlässt. Der Vasall schwört Treue und leistet Kriegsdienst und Rat."},
+        {"type": "application", "competency": {"subject": "Geschichte", "name": "Methodenkompetenz"},
+         "prompt": "Beschreibe die Lehnspyramide aus dem Tafelbild von oben nach unten.",
+         "expected_answer": "Oben der König, darunter die Kronvasallen (hohe Adlige, Bischöfe), dann die Untervasallen (Ritter), unten die Bauern."},
+        {"type": "reflection", "competency": {"subject": null, "name": "Eigenes Lernen reflektieren"},
+         "prompt": "Was hat dir geholfen, die Lehnspyramide zu verstehen?",
+         "expected_answer": "Eine persönliche Aussage, z. B. das Tafelbild oder die Bildquelle."}
+      ],
+      "submissions": [
+        {"student": "aylin.demir", "submitted_days_ago": 18, "submitted_time": "17:40", "evaluated": true,
+         "summary": "Der König hat Land an Adlige verliehen, die ihm dafür treu sein mussten.",
+         "understanding_score": 88,
+         "feedback": "Du erklärst die Begriffe sicher. Achte noch darauf, die Bauern in der Pyramide zu nennen.",
+         "gaps": ["Rolle der Bauern genauer beschreiben"],
+         "answers": [
+           {"q": 0, "answer": "Ein Lehen ist Land, das man vom König bekommt. Dafür muss man treu sein und mit in den Krieg ziehen.", "score": 90, "feedback": "Genau, sehr klar erklärt.", "mistake_type": null, "mistake_confidence": null, "mistake_source": null},
+           {"q": 1, "answer": "Oben König, dann Kronvasallen, dann Ritter, dann Bauern.", "score": 85, "feedback": "Richtig, die Reihenfolge stimmt.", "mistake_type": null, "mistake_confidence": null, "mistake_source": null},
+           {"q": 2, "answer": "Das Tafelbild mit den Pfeilen.", "score": 90, "feedback": "Schön, dass du benennst, was dir hilft.", "mistake_type": null, "mistake_confidence": null, "mistake_source": null}
+         ]},
+        {"student": "finn.hartmann", "submitted_days_ago": 16, "submitted_time": "19:05", "evaluated": true,
+         "summary": "Es ging um Ritter und den König.",
+         "understanding_score": 42,
+         "feedback": "Du kennst wichtige Personen. Schau dir noch einmal an, was ein Lehen genau ist und wer wem etwas schuldet.",
+         "gaps": ["Begriff Lehen", "Pflichten des Vasallen"],
+         "answers": [
+           {"q": 0, "answer": "Ein Lehen ist ein Ritter, der für den König kämpft.", "score": 30, "feedback": "Ein Lehen ist kein Mensch, sondern das verliehene Land. Lies den Satz im Tafelbild noch einmal.", "mistake_type": "concept", "mistake_confidence": 84, "mistake_source": "demo"},
+           {"q": 1, "answer": "König und Bauern.", "score": 45, "feedback": "Oben und unten stimmen. Wer steht dazwischen?", "mistake_type": "incomplete", "mistake_confidence": 77, "mistake_source": "demo"},
+           {"q": 2, "answer": "", "score": 0, "feedback": "Probier beim nächsten Mal, einen Satz dazu zu schreiben.", "mistake_type": "empty", "mistake_confidence": 99, "mistake_source": "demo"}
+         ]}
+      ]
+    },
+    {
+      "key": "8a-ge-02",
+      "class": "8a",
+      "teacher": "selin.kaya",
+      "subject": "Geschichte",
+      "topic": "Leben in der mittelalterlichen Stadt",
+      "held_days_ago": 2,
+      "published_days_ago": 2,
+      "published_time": "14:30",
+      "due_days_ago": -3,
+      "notes": "Geschichte 8a – Stadt im Mittelalter. Stadtplan-Arbeit, Stadtrecht, Zünfte. HA auf der Plattform.",
+      "summary": "Mittelalterliche Städte hatten Mauern, einen Markt und eigene Rechte. Handwerker schlossen sich in Zünften zusammen.",
+      "practice_competency": null,
+      "students": ["aylin.demir", "finn.hartmann", "marie.vogel"],
+      "questions": [
+        {"type": "comprehension", "competency": {"subject": "Geschichte", "name": "Sachkompetenz"},
+         "prompt": "Was war eine Zunft?",
+         "expected_answer": "Ein Zusammenschluss von Handwerkern eines Berufs, der Preise, Ausbildung und Qualität regelte."}
+      ],
+      "submissions": []
+    },
+    {
+      "key": "8a-ge-03-entwurf",
+      "class": "8a",
+      "teacher": "selin.kaya",
+      "subject": "Geschichte",
+      "topic": "Die Pest im 14. Jahrhundert",
+      "held_days_ago": -1,
+      "published_days_ago": null,
+      "published_time": null,
+      "due_days_ago": null,
+      "notes": "Entwurf: Quellenarbeit Pestbericht.",
+      "summary": null,
+      "practice_competency": null,
+      "students": [],
+      "questions": [],
+      "submissions": []
+    },
+    {
+      "key": "8a-ge-foerder-01",
+      "class": "8a",
+      "teacher": "selin.kaya",
+      "subject": "Geschichte",
+      "topic": "Förderaufgabe: Sachkompetenz Geschichte",
+      "held_days_ago": 12,
+      "published_days_ago": 12,
+      "published_time": "16:00",
+      "due_days_ago": 7,
+      "notes": "Förderaufgabe zu Begriffen des Lehnswesens.",
+      "summary": "Wiederholung der Begriffe Lehen, Vasall und Lehnsherr.",
+      "practice_competency": {"subject": "Geschichte", "name": "Sachkompetenz"},
+      "students": ["finn.hartmann"],
+      "questions": [
+        {"type": "comprehension", "competency": {"subject": "Geschichte", "name": "Sachkompetenz"},
+         "prompt": "Ordne zu: Wer gibt das Lehen, wer bekommt es?",
+         "expected_answer": "Der Lehnsherr gibt das Lehen, der Vasall bekommt es."}
+      ],
+      "submissions": [
+        {"student": "finn.hartmann", "submitted_days_ago": 9, "submitted_time": "16:45", "evaluated": true,
+         "summary": "Der Lehnsherr gibt Land, der Vasall bekommt es.",
+         "understanding_score": 70,
+         "feedback": "Deutlich besser als beim letzten Mal.",
+         "gaps": [],
+         "answers": [
+           {"q": 0, "answer": "Der Lehnsherr gibt das Lehen und der Vasall bekommt es.", "score": 75, "feedback": "Richtig zugeordnet.", "mistake_type": "incomplete", "mistake_confidence": 65, "mistake_source": "teacher"}
+         ]}
+      ]
+    }
+  ],
+  "review_items": [
+    {"student": "aylin.demir", "lesson": "8a-ge-01", "q": 0, "box": 3, "due_in_days": 0, "last_reviewed_days_ago": 7, "knew": 2, "hard": 0, "forgot": 0},
+    {"student": "finn.hartmann", "lesson": "8a-ge-01", "q": 1, "box": 1, "due_in_days": -1, "last_reviewed_days_ago": 2, "knew": 0, "hard": 1, "forgot": 1}
+  ],
+  "explanation_sessions": [
+    {"student": "finn.hartmann", "lesson": "8a-ge-01", "topic": "Das Lehnswesen im Mittelalter", "started_days_ago": 17, "started_time": "18:20",
+     "finished": true, "understanding_score": 55, "feedback": "Du kannst die Pyramide jetzt erklären; beim Begriff Lehen hilft noch ein Beispiel.",
+     "messages": [
+       {"author": "student", "content": "Beim Lehnswesen gibt der König den Rittern Geld."},
+       {"author": "tutor", "content": "Was genau gibt der König weiter – Geld oder etwas anderes?"},
+       {"author": "student", "content": "Ach so, Land. Das heißt Lehen."}
+     ]},
+    {"student": "marie.vogel", "lesson": null, "topic": "Wie funktioniert ein Vulkan?", "started_days_ago": 4, "started_time": "20:00",
+     "finished": false, "understanding_score": null, "feedback": null,
+     "messages": [
+       {"author": "student", "content": "Ein Vulkan ist ein Berg, aus dem Lava kommt."},
+       {"author": "tutor", "content": "Woher kommt die Lava, bevor sie oben austritt?"}
+     ]}
+  ],
+  "consents": [
+    {"student": "aylin.demir", "guardian_name": "Sevgi Demir", "purposes": ["audio", "transcript", "ai_analysis"], "granted_days_ago": 30, "revoked_days_ago": null},
+    {"student": "finn.hartmann", "guardian_name": "Jan Hartmann", "purposes": ["audio"], "granted_days_ago": 25, "revoked_days_ago": null},
+    {"student": "marie.vogel", "guardian_name": "Katrin Vogel", "purposes": ["audio", "transcript"], "granted_days_ago": 40, "revoked_days_ago": 10}
+  ]
+}
