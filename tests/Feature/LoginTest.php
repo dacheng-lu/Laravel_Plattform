@@ -167,20 +167,48 @@ class LoginTest extends TestCase
         $this->assertDatabaseCount('users', 1);
     }
 
+    /**
+     * The config file is required directly instead of refreshing the application, because a fresh
+     * boot lets LoadEnvironmentVariables rewrite DEMO_MODE from .env through Laravel's immutable
+     * env repository and would silently mask the value prepared by this test.
+     */
     #[DataProvider('demoModeValues')]
     public function test_demo_mode_env_value_is_parsed_strictly(string $value, bool $expected): void
     {
+        $original = [
+            'env' => $_ENV['DEMO_MODE'] ?? null,
+            'server' => $_SERVER['DEMO_MODE'] ?? null,
+            'putenv' => getenv('DEMO_MODE'),
+        ];
+
         $_ENV['DEMO_MODE'] = $value;
         $_SERVER['DEMO_MODE'] = $value;
         putenv("DEMO_MODE={$value}");
 
         try {
-            $this->refreshApplication();
+            $config = require config_path('app.php');
 
-            $this->assertSame($expected, config('app.demo.enabled'));
+            $this->assertSame($expected, $config['demo']['enabled']);
         } finally {
-            unset($_ENV['DEMO_MODE'], $_SERVER['DEMO_MODE']);
-            putenv('DEMO_MODE');
+            if ($original['env'] === null) {
+                unset($_ENV['DEMO_MODE']);
+            } else {
+                $_ENV['DEMO_MODE'] = $original['env'];
+            }
+
+            if ($original['server'] === null) {
+                unset($_SERVER['DEMO_MODE']);
+            } else {
+                $_SERVER['DEMO_MODE'] = $original['server'];
+            }
+
+            $previousPutenv = $original['putenv'];
+
+            if ($previousPutenv === false) {
+                putenv('DEMO_MODE');
+            } else {
+                putenv("DEMO_MODE={$previousPutenv}");
+            }
         }
     }
 
