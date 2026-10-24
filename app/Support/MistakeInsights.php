@@ -2,6 +2,7 @@
 
 namespace App\Support;
 
+use App\MistakeSource;
 use App\MistakeType;
 use Illuminate\Support\Facades\DB;
 
@@ -12,10 +13,13 @@ use Illuminate\Support\Facades\DB;
 class MistakeInsights
 {
     /**
-     * How often each mistake type occurs per competency, counted over the classified answers of the given students.
+     * How often each mistake type occurs per competency, counted over the classified answers of the given students and
+     * split by who classified: a model's hint ("ai", everything that is not the teacher's own order) and the teacher's
+     * confirmed or corrected type ("teacher"). The two never mix, so the overview can mark only the model's counts as
+     * a hint that may be wrong.
      *
      * @param  list<int>  $studentIds
-     * @return array<int, array<string, int>> competency id => [MistakeType value => count]
+     * @return array<int, array{ai: array<string, int>, teacher: array<string, int>}> competency id => counts by source
      */
     public static function distributionByCompetency(array $studentIds): array
     {
@@ -29,8 +33,8 @@ class MistakeInsights
             ->whereIn('submissions.student_id', $studentIds)
             ->whereNotNull('answers.mistake_type')
             ->whereNotNull('questions.competency_id')
-            ->groupBy('questions.competency_id', 'answers.mistake_type')
-            ->selectRaw('questions.competency_id as competency_id, answers.mistake_type as mistake_type, count(*) as mistake_count')
+            ->groupBy('questions.competency_id', 'answers.mistake_type', 'answers.mistake_source')
+            ->selectRaw('questions.competency_id as competency_id, answers.mistake_type as mistake_type, answers.mistake_source as mistake_source, count(*) as mistake_count')
             ->get();
 
         $distribution = [];
@@ -41,7 +45,10 @@ class MistakeInsights
                 continue;
             }
 
-            $distribution[(int) $row->competency_id][(string) $row->mistake_type] = (int) $row->mistake_count;
+            // Only the teacher's own order counts as confirmed; an unknown or missing source stays a model's hint.
+            $bucket = $row->mistake_source === MistakeSource::Teacher->value ? 'teacher' : 'ai';
+
+            $distribution[(int) $row->competency_id][$bucket][(string) $row->mistake_type] = (int) $row->mistake_count;
         }
 
         return $distribution;

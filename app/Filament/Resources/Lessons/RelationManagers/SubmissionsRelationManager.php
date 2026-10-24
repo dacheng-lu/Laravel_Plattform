@@ -132,8 +132,15 @@ class SubmissionsRelationManager extends RelationManager
                     ->label('Fehlerart korrigieren')
                     ->icon(Heroicon::OutlinedPencilSquare)
                     ->modalHeading('Fehlerart korrigieren')
-                    ->modalDescription('Deine Einordnung ersetzt den KI-Hinweis. Sie ändert weder die Bewertung noch eine Note.')
+                    ->modalDescription('Deine Einordnung ersetzt den KI-Hinweis. Sie ändert weder die Bewertung noch eine Note. Automatisch eingeordnet werden nur Antworten unter '.config('lernplattform.mistakes.threshold', 80).' Punkten; deine Einordnung hat Vorrang.')
                     ->modalSubmitActionLabel('Fehlerarten speichern')
+                    // Only whoever may re-classify this submission's answers sees the action at all; the action checks the
+                    // same right again before it writes, so a hidden action stays refused even if it were mounted.
+                    ->visible(function (Submission $record): bool {
+                        $first = $record->answers->first();
+
+                        return $first instanceof Answer && Gate::allows('correctMistake', $first);
+                    })
                     ->fillForm(fn (Submission $record): array => [
                         'mistakes' => $record->answers
                             ->mapWithKeys(fn (Answer $answer): array => [$answer->getKey() => $answer->mistake_type?->value ?? ''])
@@ -170,6 +177,12 @@ class SubmissionsRelationManager extends RelationManager
                                     is_string($type) => MistakeType::tryFrom($type),
                                     default => null,
                                 };
+
+                                // Saving the form unchanged must not invent a teacher's order: an answer that has no type
+                                // and gets none back simply stays unclassified, whoever looked at it.
+                                if ($mistakeType === null && $answer->mistake_type === null && $answer->mistake_source !== MistakeSource::Teacher) {
+                                    continue;
+                                }
 
                                 // Confirming the AI's type still makes it the teacher's own order; only a state the teacher
                                 // already confirmed stays untouched.

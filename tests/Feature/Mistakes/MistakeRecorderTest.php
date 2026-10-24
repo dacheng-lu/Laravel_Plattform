@@ -416,7 +416,9 @@ class MistakeRecorderTest extends TestCase
             new MistakeClassification(MistakeType::Procedure, 70, MistakeSource::Demo),
         ));
 
-        foreach (['null' => null, 'Text' => 'abc'] as $case => $value) {
+        // Every unusable value is refused the same way: null (the config's answer to an unreadable value), text, an
+        // empty value, a comma as decimal point and anything outside the share 0–1.
+        foreach (['null' => null, 'Text' => 'abc', 'leer' => '', 'Komma' => '0,6', 'über 1' => 1.5, 'unter 0' => -0.2] as $case => $value) {
             config()->set('lernplattform.mistakes.min_confidence', $value);
 
             $submission = $this->submission(['first' => 50]);
@@ -425,6 +427,7 @@ class MistakeRecorderTest extends TestCase
 
             $this->assertNull($this->answer($submission, 'first')->mistake_type, $case);
             $this->assertNull($this->answer($submission, 'first')->mistake_source, $case);
+            $this->assertNull($this->answer($submission, 'first')->mistake_confidence, $case);
         }
 
         // Positivkontrolle: with 0.6 the same answer and its confidence 70 are stored.
@@ -435,6 +438,23 @@ class MistakeRecorderTest extends TestCase
 
         $this->assertSame(MistakeType::Procedure, $this->answer($stored, 'first')->mistake_type);
         $this->assertSame(70, $this->answer($stored, 'first')->mistake_confidence);
+    }
+
+    public function test_the_config_file_turns_a_broken_min_confidence_into_null(): void
+    {
+        // The config array is built again the way a deployment with this environment variable would see it; the
+        // application itself is not rebooted, so no test depends on a second boot.
+        $this->assertNull($this->configFromEnv('abc')['mistakes']['min_confidence']);
+        $this->assertNull($this->configFromEnv('')['mistakes']['min_confidence']);
+        $this->assertNull($this->configFromEnv('0,6')['mistakes']['min_confidence']);
+
+        // A number outside 0–1 stays a number here; the recorder refuses it (see the test above).
+        $this->assertSame(1.4, $this->configFromEnv('1.4')['mistakes']['min_confidence']);
+
+        // Positivkontrolle: the default and a configured share between 0 and 1 are floats.
+        $this->assertSame(0.6, $this->configFromEnv(null)['mistakes']['min_confidence']);
+        $this->assertSame(0.6, $this->configFromEnv('0.6')['mistakes']['min_confidence']);
+        $this->assertSame(0.75, $this->configFromEnv('0.75')['mistakes']['min_confidence']);
     }
 
     public function test_unscored_answers_are_left_alone(): void
@@ -451,6 +471,52 @@ class MistakeRecorderTest extends TestCase
 
         // Positivkontrolle: the scored answer of the same submission is classified.
         $this->assertSame(MistakeType::Procedure, $this->answer($submission, 'second')->mistake_type);
+    }
+
+    /**
+     * The lernplattform config as a deployment with the given LERNPLATTFORM_MISTAKES_MIN_CONFIDENCE would load it;
+     * the environment is put back afterwards.
+     *
+     * @return array<string, mixed>
+     */
+    private function configFromEnv(?string $value): array
+    {
+        $key = 'LERNPLATTFORM_MISTAKES_MIN_CONFIDENCE';
+        $previous = [$_ENV[$key] ?? null, $_SERVER[$key] ?? null, getenv($key)];
+
+        if ($value === null) {
+            unset($_ENV[$key], $_SERVER[$key]);
+            putenv($key);
+        } else {
+            $_ENV[$key] = $value;
+            $_SERVER[$key] = $value;
+            putenv("{$key}={$value}");
+        }
+
+        try {
+            /** @var array<string, mixed> $config */
+            $config = require config_path('lernplattform.php');
+
+            return $config;
+        } finally {
+            if ($previous[0] === null) {
+                unset($_ENV[$key]);
+            } else {
+                $_ENV[$key] = $previous[0];
+            }
+
+            if ($previous[1] === null) {
+                unset($_SERVER[$key]);
+            } else {
+                $_SERVER[$key] = $previous[1];
+            }
+
+            if ($previous[2] === false) {
+                putenv($key);
+            } else {
+                putenv("{$key}={$previous[2]}");
+            }
+        }
     }
 
     /**

@@ -68,14 +68,10 @@ class ClaudeEvaluationMistakeTest extends TestCase
             $this->assertStringNotContainsString('student_id', $body);
             $this->assertStringNotContainsString('Schüler-ID', $body);
 
-            // The id itself must not appear as a number either. The ids of this fixture are small and deterministic, so
-            // the only numbers allowed in the body are the ones the texts and the schema bring with them.
-            $this->assertNotContains(
-                $student->id,
-                [$question->id, 0, 5, 10, 21, 80, 100, 2026, 16000],
-                'Fixture: Die Schüler-ID muss von allen Zahlen im Request verschieden sein.',
-            );
-            $this->assertDoesNotMatchRegularExpression('/\b'.$student->id.'\b/', $body);
+            // The id itself must not appear as a number either. It is set explicitly in the fixture, so the check
+            // searches for exactly this number and nothing else.
+            $this->assertSame(987654, $student->getKey());
+            $this->assertDoesNotMatchRegularExpression('/\b987654\b/', $body);
 
             // Positivkontrolle: the texts arrive, the names became neutral labels, and the question id is still labelled.
             $this->assertSame(3, substr_count($body, 'Schüler:in A'));
@@ -115,11 +111,11 @@ class ClaudeEvaluationMistakeTest extends TestCase
                 ['mistake_type', 'mistake_confidence'],
                 array_values(array_intersect(array_keys($items['properties']), ['mistake_type', 'mistake_confidence'])),
             );
-            $this->assertSame(array_column(MistakeType::cases(), 'value'), $items['properties']['mistake_type']['anyOf'][0]['enum']);
-            $this->assertCount(5, $items['properties']['mistake_type']['anyOf'][0]['enum']);
-            $this->assertSame(['type' => 'string', 'enum' => ['concept', 'procedure', 'incomplete', 'off_topic', 'empty']], $items['properties']['mistake_type']['anyOf'][0]);
-            $this->assertSame(['type' => 'null'], $items['properties']['mistake_type']['anyOf'][1]);
-            $this->assertSame([['type' => 'integer'], ['type' => 'null']], $items['properties']['mistake_confidence']['anyOf']);
+            // The schema offers exactly the five types of the spec, compared as values instead of as a nested structure.
+            $this->assertSame(array_values(array_column(MistakeType::cases(), 'value')), $items['properties']['mistake_type']['anyOf'][0]['enum']);
+            $this->assertSame('string', $items['properties']['mistake_type']['anyOf'][0]['type']);
+            $this->assertSame('null', $items['properties']['mistake_type']['anyOf'][1]['type']);
+            $this->assertSame(['integer', 'null'], array_values(array_column($items['properties']['mistake_confidence']['anyOf'], 'type')));
             $this->assertContains('mistake_type', $items['required']);
             $this->assertContains('mistake_confidence', $items['required']);
             $this->assertFalse($items['additionalProperties']);
@@ -131,6 +127,63 @@ class ClaudeEvaluationMistakeTest extends TestCase
 
             return true;
         });
+    }
+
+    public function test_disabled_mistakes_leave_request_and_result_untouched(): void
+    {
+        [$submission, $question] = $this->submissionNamingTheStudent();
+
+        // The fake answers with a classification anyway: with the feature switched off it must never reach an answer.
+        Http::fake(['api.anthropic.com/*' => Http::sequence()
+            ->push($this->messageBody([
+                'understanding_score' => 62,
+                'feedback' => 'Guter Anfang!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 55, 'feedback' => 'Fast richtig.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
+                ],
+            ]))
+            ->push($this->messageBody([
+                'understanding_score' => 62,
+                'feedback' => 'Guter Anfang!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 55, 'feedback' => 'Fast richtig.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
+                ],
+            ]))]);
+
+        $assistant = app(ClaudeLessonAssistant::class);
+
+        // Fehlerpfad: ausgeschaltet fragt die KI nichts über Fehlerarten und liefert keine.
+        config()->set('lernplattform.mistakes.enabled', false);
+        $disabled = $assistant->evaluateSubmission($submission);
+
+        $this->assertSame([$question->id => ['score' => 55, 'feedback' => 'Fast richtig.']], $disabled['answers']);
+        $this->assertSame(62, $disabled['understanding_score']);
+
+        $sentWhileDisabled = Http::recorded()[0][0]->data();
+        $itemProperties = $sentWhileDisabled['output_config']['format']['schema']['properties']['answers']['items']['properties'];
+
+        $this->assertArrayNotHasKey('mistake_type', $itemProperties);
+        $this->assertArrayNotHasKey('mistake_confidence', $itemProperties);
+        $this->assertStringNotContainsString('Fehlerart', $sentWhileDisabled['system']);
+        $this->assertStringNotContainsString('mistake_type', $sentWhileDisabled['system']);
+
+        // Positivkontrolle: eingeschaltet stehen Schema, Anweisung und Ergebnis wieder da.
+        config()->set('lernplattform.mistakes.enabled', true);
+        $enabled = $assistant->evaluateSubmission($submission);
+
+        $this->assertSame('procedure', $enabled['answers'][$question->id]['mistake_type']);
+        $this->assertSame(90, $enabled['answers'][$question->id]['mistake_confidence']);
+
+        $sentWhileEnabled = Http::recorded()[1][0]->data();
+        $itemProperties = $sentWhileEnabled['output_config']['format']['schema']['properties']['answers']['items']['properties'];
+
+        $this->assertArrayHasKey('mistake_type', $itemProperties);
+        $this->assertArrayHasKey('mistake_confidence', $itemProperties);
+        $this->assertStringContainsString('Fehlerart', $sentWhileEnabled['system']);
+
+        Http::assertSentCount(2);
     }
 
     public function test_invalid_mistake_dropped(): void
@@ -253,12 +306,14 @@ class ClaudeEvaluationMistakeTest extends TestCase
         $lesson->update(['teacher_id' => $teacher->id]);
 
         $student = User::factory()->student($lesson->schoolClass)->create([
+            'id' => 987654,
             'name' => 'Zacharias Quellenberg',
             'username' => 'zquellenberg',
             'email' => 'zacharias.quellenberg@example.org',
         ]);
-        // A classmate who is only mentioned in the notes: no submission, no account activity of their own.
-        User::factory()->student($lesson->schoolClass)->create(['name' => 'Mia Klarheit']);
+        // A classmate who is only mentioned in the notes: no submission, no account activity of their own. The label
+        // order follows the ids, so the classmate gets the id right after the student's for a stable "Schüler:in A/B".
+        User::factory()->student($lesson->schoolClass)->create(['id' => 987655, 'name' => 'Mia Klarheit']);
 
         $question = Question::factory()->for($lesson)->create([
             'type' => QuestionType::Comprehension,

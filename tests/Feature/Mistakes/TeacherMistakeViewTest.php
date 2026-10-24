@@ -79,6 +79,30 @@ class TeacherMistakeViewTest extends TestCase
             ->assertDontSee('1× Grundidee noch unklar');
     }
 
+    public function test_teacher_counts_are_separate_from_ai_counts(): void
+    {
+        // A teacher's own order on the same competency: it is not a hint that could be wrong.
+        $this->answerWithMistake(
+            $this->mia->submissions()->sole(),
+            $this->fractions,
+            35,
+            MistakeType::OffTopic,
+            MistakeSource::Teacher,
+            null,
+        );
+
+        $page = Livewire::actingAs($this->teacher)->test(LearningProgress::class);
+
+        $page->assertOk()
+            // Die KI-Zähler bleiben für sich und tragen den Hinweis …
+            ->assertSee('Fehlerarten: 3× Weg/Schritt falsch, 2× Grundidee noch unklar (KI-Hinweis, kann falsch sein)')
+            // … die Lehrkraft-Zähler stehen getrennt, ohne diesen Hinweis …
+            ->assertSee('Fehlerarten (von Lehrkraft bestätigt oder korrigiert): 1× Am Thema vorbei')
+            // … und die Einordnung der Lehrkraft zählt nicht in die KI-Verteilung hinein.
+            ->assertDontSee('2× Grundidee noch unklar, 1× Am Thema vorbei')
+            ->assertDontSee('1× Am Thema vorbei (KI-Hinweis, kann falsch sein)');
+    }
+
     public function test_cross_school_sees_nothing(): void
     {
         // Positivkontrolle: the class teacher sees the distribution (see test_distribution_per_competency).
@@ -126,12 +150,12 @@ class TeacherMistakeViewTest extends TestCase
     /**
      * An answer with a classified mistake, next to the answers the class already has.
      */
-    private function answerWithMistake(Submission $submission, Competency $competency, int $score, MistakeType $type, MistakeSource $source = MistakeSource::Demo): Answer
+    private function answerWithMistake(Submission $submission, Competency $competency, int $score, MistakeType $type, MistakeSource $source = MistakeSource::Demo, ?int $confidence = 80): Answer
     {
         return Answer::factory()
             ->for($submission)
             ->for(Question::factory()->for($submission->lesson)->create(['competency_id' => $competency->id]))
-            ->mistake($type, $source)
+            ->mistake($type, $source, $confidence)
             ->create(['score' => $score]);
     }
 }

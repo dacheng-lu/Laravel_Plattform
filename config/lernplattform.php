@@ -97,12 +97,15 @@ return [
     | (0–1) is reached – an "unclear" is better than a wrong label. `demo_short_ratio` is the share of the
     | expected answer's length below which the offline rules call an answer "incomplete".
     |
+    | `min_confidence` is read strictly: a value that is not a number (empty, text, a comma as decimal point) or
+    | lies outside 0–1 becomes `null` instead of being cast, and then nothing is classified at all (fail closed).
+    |
     */
 
     'mistakes' => [
         'enabled' => filter_var(env('LERNPLATTFORM_MISTAKES_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
         'threshold' => (int) env('LERNPLATTFORM_MISTAKES_THRESHOLD', 80),
-        'min_confidence' => (float) env('LERNPLATTFORM_MISTAKES_MIN_CONFIDENCE', 0.6),
+        'min_confidence' => filter_var(env('LERNPLATTFORM_MISTAKES_MIN_CONFIDENCE', 0.6), FILTER_VALIDATE_FLOAT, FILTER_NULL_ON_FAILURE),
         'demo_short_ratio' => 0.3,
     ],
 

@@ -15,11 +15,10 @@ use App\Models\Submission;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Actions\ViewAction;
-use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
-use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * The teacher may correct the mistake type of an answer in the submission view (spec AC-6). The correction is a hint:
@@ -44,6 +43,8 @@ class MistakeCorrectionTest extends TestCase
     private Answer $otherAnswer;
 
     private Answer $outsideAnswer;
+
+    private Answer $plainAnswer;
 
     protected function setUp(): void
     {
@@ -78,6 +79,12 @@ class MistakeCorrectionTest extends TestCase
             ->for(Question::factory()->for($this->lesson)->create(['prompt' => 'Warum kürzt man überhaupt?', 'competency_id' => $competency->id]))
             ->mistake(MistakeType::Procedure, MistakeSource::Demo, 65)
             ->create(['answer' => 'Damit die Zahlen kleiner werden.', 'score' => 45]);
+
+        // An answer nobody classified yet: saving the form unchanged must not turn it into a teacher's own order.
+        $this->plainAnswer = Answer::factory()
+            ->for($this->submission)
+            ->for(Question::factory()->for($this->lesson)->create(['prompt' => 'Was bleibt beim Kürzen gleich?', 'competency_id' => $competency->id]))
+            ->create(['answer' => 'Der Wert der Zahl bleibt gleich.', 'score' => 50]);
 
         // A second homework of the same student: its answer is never part of this submission's form.
         $outsideLesson = Lesson::factory()
@@ -193,15 +200,68 @@ class MistakeCorrectionTest extends TestCase
             ->assertMountedActionModalSee(['Von der Lehrkraft: keine Fehlerart']);
     }
 
+    public function test_unchanged_answers_without_a_type_stay_without_a_teacher_source(): void
+    {
+        // Vorkontrolle: the answer really has no classification of its own.
+        $this->assertNull($this->plainAnswer->mistake_type);
+        $this->assertNull($this->plainAnswer->mistake_source);
+
+        // The form offers every answer of the submission and names the threshold the AI obeys (the teacher's own order
+        // has priority anyway), so nobody has to guess why an answer was classified at all.
+        config()->set('lernplattform.mistakes.threshold', 75);
+
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->mountAction(TestAction::make('correctMistakes')->table($this->submission))
+            ->assertMountedActionModalSee(['unter 75 Punkten', 'Fehlerarten speichern']);
+
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
+                'mistakes' => [
+                    // Unchanged: the answer had no type before and gets none back.
+                    $this->plainAnswer->getKey() => '',
+                    // Changed in the same save, so the action really runs and writes.
+                    $this->otherAnswer->getKey() => MistakeType::Concept->value,
+                ],
+            ])
+            ->assertNotified('Fehlerarten gespeichert');
+
+        $this->plainAnswer->refresh();
+        $this->assertNull($this->plainAnswer->mistake_type);
+        // Fehlerpfad: saving the form unchanged invents no teacher's order and no confidence.
+        $this->assertNull($this->plainAnswer->mistake_source);
+        $this->assertNull($this->plainAnswer->mistake_confidence);
+        $this->assertSame(50, $this->plainAnswer->score);
+
+        // Positivkontrolle im selben Speichervorgang: die geänderte Antwort trägt die Lehrkraft als Quelle.
+        $this->otherAnswer->refresh();
+        $this->assertSame(MistakeType::Concept, $this->otherAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Teacher, $this->otherAnswer->mistake_source);
+        $this->assertNull($this->otherAnswer->mistake_confidence);
+
+        // Und eine Antwort, die gar nicht im Formular stand, behält die Einordnung der KI.
+        $this->answer->refresh();
+        $this->assertSame(MistakeType::Concept, $this->answer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->answer->mistake_source);
+        $this->assertSame(72, $this->answer->mistake_confidence);
+    }
+
     public function test_correction_authorized(): void
     {
         $admin = User::factory()->admin()->for($this->schoolClass->school)->create();
         $foreignTeacher = User::factory()->teacher()->create();
         $colleague = User::factory()->teacher()->for($this->schoolClass->school)->create();
+        $action = TestAction::make('correctMistakes')->table($this->submission);
 
-        // Positivkontrolle: the class teacher and the school's admin may correct.
+        // Positivkontrolle: the class teacher and the school's admin may correct …
         $this->assertTrue($this->teacher->can('correctMistake', $this->answer));
         $this->assertTrue($admin->can('correctMistake', $this->answer));
+
+        // … and the teacher is offered the action in the submission view: the Livewire component renders its label.
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->assertSee('Fehlerart korrigieren');
 
         // Another school, a colleague without this lesson, the student and the operator may not.
         foreach ([$foreignTeacher, $colleague, $this->student, User::factory()->operator()->create()] as $viewer) {
@@ -220,7 +280,7 @@ class MistakeCorrectionTest extends TestCase
 
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
-            ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
+            ->callAction($action, data: [
                 'mistakes' => [
                     $this->answer->getKey() => MistakeType::Procedure->value,
                     $foreignAnswer->getKey() => MistakeType::OffTopic->value,
@@ -237,32 +297,60 @@ class MistakeCorrectionTest extends TestCase
         $this->assertSame(15, $foreignAnswer->score);
 
         // A teacher of another school really executes the action: it is refused and writes nothing.
-        try {
-            Livewire::actingAs($foreignTeacher)
-                ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
-                ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                    'mistakes' => [$this->answer->getKey() => MistakeType::OffTopic->value],
-                ])
-                ->assertForbidden();
-        } catch (AuthorizationException|HttpExceptionInterface $denied) {
-            // Livewire may surface the refusal itself instead of a 403 response: either way it is a 403.
-            if ($denied instanceof HttpExceptionInterface) {
-                $this->assertSame(403, $denied->getStatusCode());
-            }
-        }
+        $this->attemptCorrectionAs($foreignTeacher);
 
-        $this->answer->refresh();
-        $this->assertSame(MistakeType::Procedure, $this->answer->mistake_type);
+        $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
 
-        // Positivkontrolle in derselben Testmethode: the responsible teacher stores exactly that change.
+        // Fehlerpfad im Livewire-Pfad: the student moved to another school, so the lesson's own teacher may not see
+        // them any more – the component does not render the action at all, and a forced call writes nothing.
+        $ownClassId = $this->student->school_class_id;
+        $ownSchoolId = $this->student->school_id;
+        $this->student->update(['school_class_id' => $foreignClass->id, 'school_id' => $foreignClass->school_id]);
+
+        $this->assertFalse($this->teacher->can('correctMistake', $this->answer));
+
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
-            ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
+            ->assertSee('Ansehen')
+            ->assertDontSee('Fehlerart korrigieren');
+
+        $this->attemptCorrectionAs($this->teacher);
+
+        $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
+        $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
+        // The unclassified answer is still unclassified – the refused call did not touch it either.
+        $this->assertNull($this->plainAnswer->refresh()->mistake_type);
+        $this->assertNull($this->plainAnswer->mistake_source);
+
+        // Positivkontrolle in derselben Testmethode: back in her class, the responsible teacher stores exactly that change.
+        $this->student->update(['school_class_id' => $ownClassId, 'school_id' => $ownSchoolId]);
+
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->assertSee('Fehlerart korrigieren')
+            ->callAction($action, data: [
                 'mistakes' => [$this->answer->getKey() => MistakeType::OffTopic->value],
             ]);
 
         $this->assertSame(MistakeType::OffTopic, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
+    }
+
+    /**
+     * Tries the correction as the given user: Livewire answers with 403, refuses to mount the hidden action or does
+     * nothing at all – each of them is the refusal this test asserts, and the caller checks that nothing was written.
+     */
+    private function attemptCorrectionAs(User $viewer): void
+    {
+        try {
+            Livewire::actingAs($viewer)
+                ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+                ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
+                    'mistakes' => [$this->answer->getKey() => MistakeType::OffTopic->value],
+                ]);
+        } catch (Throwable) {
+            // Refused either way: the caller asserts that nothing was written.
+        }
     }
 }

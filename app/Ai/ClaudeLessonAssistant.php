@@ -136,6 +136,9 @@ class ClaudeLessonAssistant implements LessonAssistant
         $ownSummary = (string) $submission->summary;
         $ownSummary = trim($ownSummary) === '' ? '(keine Zusammenfassung)' : $pseudonymizer->apply($ownSummary);
         $threshold = (int) config('lernplattform.mistakes.threshold', 80);
+        // With the mistake types switched off the request carries neither the schema fields nor a word about them: an
+        // answer then simply stays unclassified, whatever the AI would have said.
+        $mistakesEnabled = (bool) config('lernplattform.mistakes.enabled');
         // The teacher's notes and summary name students as well, so they go through the same pseudonymizer.
         $lessonContext = $pseudonymizer->apply($this->lessonContext($lesson));
 
@@ -145,8 +148,22 @@ class ClaudeLessonAssistant implements LessonAssistant
             'Antwort: '.$this->ownAnswer($answers->get($question->id)?->answer, $pseudonymizer),
         ]))->implode("\n\n");
 
+        $answerProperties = [
+            'question_id' => ['type' => 'integer'],
+            'score' => ['type' => 'integer'],
+            'feedback' => ['type' => 'string'],
+        ];
+
+        if ($mistakesEnabled) {
+            $answerProperties['mistake_type'] = ['anyOf' => [['type' => 'string', 'enum' => array_column(MistakeType::cases(), 'value')], ['type' => 'null']]];
+            $answerProperties['mistake_confidence'] = ['anyOf' => [['type' => 'integer'], ['type' => 'null']]];
+        }
+
         $result = $this->ask(
-            system: self::ROLE_PROMPT.' Du prüfst Hausaufgaben darauf, ob die Schülerin oder der Schüler die Stunde verstanden hat. Vergleiche die eigene Zusammenfassung und die Antworten mit den Notizen der Lehrkraft und dem Erwartungshorizont. Reflexionsfragen haben keine einzig richtige Antwort: Bewerte dort den Bezug zur Stunde, eigene Gedanken und Begründungen. Alle Punktzahlen liegen zwischen 0 und 100. Das Feedback ist ermutigend, konkret und richtet sich direkt an die Schülerin oder den Schüler. Nenne in gaps höchstens drei kurze Hinweise, was noch einmal wiederholt werden sollte. Zitiere den Erwartungshorizont nicht wörtlich. Nur wenn die Punktzahl einer Antwort unter '.$threshold.' liegt, ordnest du zusätzlich ihre Fehlerart ein (mistake_type) und nennst deine Sicherheit von 0 bis 100 (mistake_confidence); ab dieser Punktzahl setzt du beides auf null. Ordne die Antwort ein, nie die Person; keine Aussagen über Motivation oder Gefühle.',
+            system: self::ROLE_PROMPT.' Du prüfst Hausaufgaben darauf, ob die Schülerin oder der Schüler die Stunde verstanden hat. Vergleiche die eigene Zusammenfassung und die Antworten mit den Notizen der Lehrkraft und dem Erwartungshorizont. Reflexionsfragen haben keine einzig richtige Antwort: Bewerte dort den Bezug zur Stunde, eigene Gedanken und Begründungen. Alle Punktzahlen liegen zwischen 0 und 100. Das Feedback ist ermutigend, konkret und richtet sich direkt an die Schülerin oder den Schüler. Nenne in gaps höchstens drei kurze Hinweise, was noch einmal wiederholt werden sollte. Zitiere den Erwartungshorizont nicht wörtlich.'
+                .($mistakesEnabled
+                    ? ' Nur wenn die Punktzahl einer Antwort unter '.$threshold.' liegt, ordnest du zusätzlich ihre Fehlerart ein (mistake_type) und nennst deine Sicherheit von 0 bis 100 (mistake_confidence); ab dieser Punktzahl setzt du beides auf null. Ordne die Antwort ein, nie die Person; keine Aussagen über Motivation oder Gefühle.'
+                    : ''),
             content: [
                 ...$this->worksheetBlocks($lesson),
                 ['type' => 'text', 'text' => $lessonContext
@@ -157,13 +174,7 @@ class ClaudeLessonAssistant implements LessonAssistant
                 'understanding_score' => ['type' => 'integer'],
                 'feedback' => ['type' => 'string'],
                 'gaps' => ['type' => 'array', 'items' => ['type' => 'string']],
-                'answers' => ['type' => 'array', 'items' => $this->objectSchema([
-                    'question_id' => ['type' => 'integer'],
-                    'score' => ['type' => 'integer'],
-                    'feedback' => ['type' => 'string'],
-                    'mistake_type' => ['anyOf' => [['type' => 'string', 'enum' => array_column(MistakeType::cases(), 'value')], ['type' => 'null']]],
-                    'mistake_confidence' => ['anyOf' => [['type' => 'integer'], ['type' => 'null']]],
-                ])],
+                'answers' => ['type' => 'array', 'items' => $this->objectSchema($answerProperties)],
             ]),
         );
 
@@ -174,7 +185,7 @@ class ClaudeLessonAssistant implements LessonAssistant
                 continue;
             }
 
-            $evaluatedAnswers[$answer['question_id']] = $this->evaluatedAnswer($answer);
+            $evaluatedAnswers[$answer['question_id']] = $this->evaluatedAnswer($answer, $mistakesEnabled, $threshold);
         }
 
         return [
@@ -186,23 +197,27 @@ class ClaudeLessonAssistant implements LessonAssistant
     }
 
     /**
-     * One answer of the evaluation result: score and feedback always, the mistake type only when it is a plausible
-     * classification below the configured threshold. Otherwise the keys stay away, so the caller cannot mistake a
-     * missing value for a type.
+     * One answer of the evaluation result: score and feedback always, the mistake type only while the feature is on
+     * and it is a plausible classification below the configured threshold. Otherwise the keys stay away, so the caller
+     * cannot mistake a missing value for a type.
      *
      * @param  array<string, mixed>  $answer
      * @return array<string, mixed>
      */
-    private function evaluatedAnswer(array $answer): array
+    private function evaluatedAnswer(array $answer, bool $mistakesEnabled, int $threshold): array
     {
         $evaluated = [
             'score' => $this->clamp($answer['score']),
             'feedback' => (string) $answer['feedback'],
         ];
 
+        if (! $mistakesEnabled) {
+            return $evaluated;
+        }
+
         // The threshold holds here as well: an answer that is good enough never carries a mistake type, whatever the
         // AI returns. Only the answer is classified, never the person.
-        if ($evaluated['score'] >= (int) config('lernplattform.mistakes.threshold', 80)) {
+        if ($evaluated['score'] >= $threshold) {
             return $evaluated;
         }
 

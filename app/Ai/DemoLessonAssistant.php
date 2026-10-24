@@ -167,9 +167,11 @@ class DemoLessonAssistant implements LessonAssistant
             $explanation = $description !== '' ? $this->sentenceEnd($description) : ($sentences[0] ?? "Schau dir die Stunde „{$topic}“ noch einmal an.");
             $questions = $this->explanationFirst($questions, "Lies zuerst die kurze Erklärung: {$explanation} Erkläre danach mit eigenen Worten, was man unter „{$term(0)}“ versteht.");
         } elseif ($mistakeType === MistakeType::Incomplete) {
+            // The scaffold is one sentence that fits every question type: it follows the question instead of heading it,
+            // so no "Ergänze den fehlenden Teil: Beschreibe …" is stacked in front of an imperative.
             $questions = array_map(fn (array $question): array => [
                 ...$question,
-                'prompt' => 'Ergänze den fehlenden Teil: '.$this->unlabelled($question['prompt']).' Formuliere deinen fehlenden Satzteil mit dem Satzanfang „… weil …“.',
+                'prompt' => $this->unlabelled($question['prompt']).' Ergänze deine Antwort um einen Satz mit dem Satzanfang „… weil …“.',
             ], $questions);
         }
 

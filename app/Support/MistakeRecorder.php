@@ -124,6 +124,8 @@ class MistakeRecorder
 
     /**
      * `min_confidence` as a 0–100 value; anything outside 0–1 is unusable, so no confidence ever reaches it.
+     * The config hands out `null` for a value that is not a number at all (see `config/lernplattform.php`), which
+     * is unusable here as well – an unreadable minimum never opens the gate.
      */
     private function minimumConfidence(): int
     {

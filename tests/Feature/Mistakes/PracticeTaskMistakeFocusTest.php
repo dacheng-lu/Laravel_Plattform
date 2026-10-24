@@ -65,14 +65,27 @@ class PracticeTaskMistakeFocusTest extends TestCase
         $this->assertStringNotContainsString('Jetzt wird es praktisch:', $procedure['questions'][0]['prompt']);
         $this->assertSame(1, substr_count($procedure['questions'][0]['prompt'], 'Schritt für Schritt'));
 
-        // Incomplete asks with a sentence frame instead of a free answer, again without the offline headings.
+        // Incomplete adds one sentence frame that fits every question type. It follows the question instead of heading
+        // it, so no "Ergänze den fehlenden Teil: Beschreibe …" stands in front of an imperative.
         foreach ($incomplete['questions'] as $question) {
-            $this->assertStringStartsWith('Ergänze den fehlenden Teil: ', $question['prompt']);
-            $this->assertStringContainsString('„… weil …“', $question['prompt']);
+            $this->assertStringEndsWith('Ergänze deine Antwort um einen Satz mit dem Satzanfang „… weil …“.', $question['prompt']);
+            $this->assertStringNotContainsString('Ergänze den fehlenden Teil', $question['prompt']);
             $this->assertStringNotContainsString('Zum Aufwärmen:', $question['prompt']);
             $this->assertStringNotContainsString('Jetzt wird es praktisch:', $question['prompt']);
             $this->assertStringNotContainsString('Zum Knobeln:', $question['prompt']);
         }
+
+        // Je Fragetyp bleibt der eigene Auftrag stehen: die Verständnisfrage beginnt erklärend, die Anwendungsfrage
+        // mit einem eigenen Beispiel – das Gerüst kommt erst danach.
+        $this->assertStringStartsWith('Erkläre mit eigenen Worten', $incomplete['questions'][0]['prompt']);
+
+        $incompleteApplications = array_values(array_filter(
+            $incomplete['questions'],
+            fn (array $question): bool => $question['type'] === QuestionType::Application,
+        ));
+
+        $this->assertCount(1, $incompleteApplications);
+        $this->assertStringStartsWith('Finde ein eigenes Beispiel', $incompleteApplications[0]['prompt']);
 
         // Every variant keeps the shape of a Förderaufgabe: at most four questions, exactly one application.
         foreach ([$concept, $procedure, $incomplete, $withoutArgument] as $draft) {
