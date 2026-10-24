@@ -67,7 +67,7 @@
                 <div class="grid gap-1 rounded-xl p-4 ring-1 ring-gray-950/5 dark:ring-white/10">
                     <p class="text-sm text-gray-600 dark:text-gray-400">Ø Verständnis</p>
                     <p class="text-2xl font-semibold text-gray-950 dark:text-white">{{ $kpis['average_understanding'] === null ? '–' : $kpis['average_understanding'].' %' }}</p>
-                    <p class="text-xs text-gray-500 dark:text-gray-400">Durchschnitt der KI-Gesamtbewertung aller bewerteten Abgaben.</p>
+                    <p class="text-xs text-gray-500 dark:text-gray-400">Durchschnitt der KI-Gesamtbewertung aller bewerteten Hausaufgaben (ohne Förderaufgaben).</p>
                 </div>
 
                 <div class="grid gap-1 rounded-xl p-4 ring-1 ring-gray-950/5 dark:ring-white/10">

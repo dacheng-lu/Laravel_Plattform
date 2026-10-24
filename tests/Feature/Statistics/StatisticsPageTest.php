@@ -3,6 +3,9 @@
 namespace Tests\Feature\Statistics;
 
 use App\Filament\Pages\Statistics;
+use App\Livewire\Statistics\CompetencyAveragesChart;
+use App\Livewire\Statistics\ExplainItUsageChart;
+use App\Livewire\Statistics\HandInRateChart;
 use App\Livewire\Statistics\MistakeTypesChart;
 use App\Livewire\Statistics\StatisticsChart;
 use App\Livewire\Statistics\UnderstandingTrendChart;
@@ -20,6 +23,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Livewire\Livewire;
+use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionMethod;
 use Tests\TestCase;
 
@@ -209,16 +213,35 @@ class StatisticsPageTest extends TestCase
             ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 65 && $kpis['evaluated_submissions'] === 6);
     }
 
+    public function test_an_unknown_period_in_the_url_falls_back_to_the_default(): void
+    {
+        Livewire::actingAs($this->teacher)
+            ->withQueryParams(['wochen' => 7])
+            ->test(Statistics::class)
+            ->assertOk()
+            ->assertSet('weeks', 10)
+            ->assertSet('schoolClassId', $this->schoolClass->id);
+
+        // Positive control: an offered period stays as chosen.
+        Livewire::actingAs($this->teacher)
+            ->withQueryParams(['wochen' => 4])
+            ->test(Statistics::class)
+            ->assertOk()
+            ->assertSet('weeks', 4);
+    }
+
     public function test_the_page_shows_no_individual_results(): void
     {
         $page = Livewire::actingAs($this->teacher)
             ->test(Statistics::class)
             ->assertOk()
             ->assertSee('Abgabequote')
-            ->assertDontSee('Mia Hoffmann')
-            ->assertDontSee('Ben Krüger')
             ->assertDontSee('Sofort gewusst')
             ->assertDontSee('Nicht gewusst');
+
+        foreach ($this->students as $student) {
+            $page->assertDontSee($student->name);
+        }
 
         $question = Question::factory()->for($this->firstLesson)->create();
 
@@ -228,27 +251,47 @@ class StatisticsPageTest extends TestCase
         }
 
         // Private self-assessments and free-topic sessions change nothing on the page.
-        Livewire::actingAs($this->teacher)
+        $page = Livewire::actingAs($this->teacher)
             ->test(Statistics::class)
             ->assertOk()
             ->assertSeeTextInOrder(['Abgabequote', '75 %', 'Ø Verständnis', '65 %', 'Anteil mit Förderbedarf', '33 %'])
-            ->assertDontSee('Mia Hoffmann')
             ->assertDontSee('Mein Hobby');
+
+        foreach ($this->students as $student) {
+            $page->assertDontSee($student->name);
+        }
     }
 
-    public function test_manipulated_chart_properties_of_a_foreign_class_are_forbidden(): void
+    /**
+     * @return array<string, array{class-string<StatisticsChart>}>
+     */
+    public static function charts(): array
+    {
+        return [
+            'Verständnis-Trend' => [UnderstandingTrendChart::class],
+            'Kompetenzen' => [CompetencyAveragesChart::class],
+            'Fehlerarten' => [MistakeTypesChart::class],
+            'Abgabequote' => [HandInRateChart::class],
+            "Erklär's mir" => [ExplainItUsageChart::class],
+        ];
+    }
+
+    /**
+     * @param  class-string<StatisticsChart>  $chart
+     */
+    #[DataProvider('charts')]
+    public function test_manipulated_chart_properties_of_a_foreign_class_are_forbidden(string $chart): void
     {
         $foreignClass = SchoolClass::factory()->create(['name' => 'Fremdklasse']);
 
-        foreach ([UnderstandingTrendChart::class, MistakeTypesChart::class] as $chart) {
-            Livewire::actingAs($this->teacher)
-                ->test($chart, ['schoolClassId' => $this->schoolClass->id])
-                ->assertOk();
+        // Positive control: the chart renders for the own class.
+        Livewire::actingAs($this->teacher)
+            ->test($chart, ['schoolClassId' => $this->schoolClass->id])
+            ->assertOk();
 
-            Livewire::actingAs($this->teacher)
-                ->test($chart, ['schoolClassId' => $foreignClass->id])
-                ->assertForbidden();
-        }
+        Livewire::actingAs($this->teacher)
+            ->test($chart, ['schoolClassId' => $foreignClass->id])
+            ->assertForbidden();
     }
 
     public function test_the_charts_deliver_chart_js_data(): void
@@ -279,26 +322,80 @@ class StatisticsPageTest extends TestCase
         $this->assertCount(11, $trend['labels']);
         $this->assertSame(65, $points['KW '.today()->isoWeek]);
         $this->assertNull($points['KW '.today()->subWeeks(3)->isoWeek]);
+        $this->assertSame(0.3, $trend['datasets'][0]['tension']);
+        $this->assertTrue($trend['datasets'][0]['spanGaps']);
 
         $mistakes = $this->chartData(MistakeTypesChart::class);
         $datasets = collect($mistakes['datasets'])->keyBy('label');
+        $colors = array_column($mistakes['datasets'], 'backgroundColor');
 
         $this->assertSame(['Mathematik'], $mistakes['labels']);
         $this->assertCount(5, $mistakes['datasets']);
+
+        // One colour per mistake type in the order of MistakeType::cases(), or the stacked bars blur into one.
+        $this->assertCount(5, array_unique($colors));
+        $this->assertSame(['#f87171', '#fb923c', '#facc15', '#a78bfa', '#94a3b8'], $colors);
+        $this->assertSame($colors, array_column($mistakes['datasets'], 'borderColor'));
         $this->assertSame(4, $datasets[MistakeType::Concept->getLabel()]['data'][0]);
         $this->assertSame(1, $datasets[MistakeType::Procedure->getLabel()]['data'][0]);
         $this->assertSame(1, $datasets[MistakeType::Incomplete->getLabel()]['data'][0]);
         $this->assertSame(0, $datasets[MistakeType::Empty->getLabel()]['data'][0]);
     }
 
-    public function test_the_student_dashboard_shows_no_statistics(): void
+    public function test_the_competency_bars_follow_the_traffic_light(): void
     {
+        $strong = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Grundlagen der Zellatmung und Photosynthese']);
+        $partly = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Kurz']);
+        $weak = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Mittel']);
+
+        foreach ($this->students->take(3) as $student) {
+            $submission = Submission::query()
+                ->where('lesson_id', $this->firstLesson->id)
+                ->where('student_id', $student->id)
+                ->firstOrFail();
+
+            foreach ([[$strong, 90], [$partly, 60], [$weak, 30]] as [$competency, $score]) {
+                Answer::factory()
+                    ->for($submission)
+                    ->for(Question::factory()->for($this->firstLesson)->for($competency))
+                    ->mistake(MistakeType::Concept)
+                    ->create(['score' => $score]);
+            }
+        }
+
+        $chart = $this->chartData(CompetencyAveragesChart::class);
+
+        // Alphabetical by label: Grundlagen… (90, understood), Kurz (60, partly), Mittel (30, needs support).
+        $this->assertSame([90, 60, 30], $chart['datasets'][0]['data']);
+        $this->assertSame(['#34d399', '#fbbf24', '#f87171'], $chart['datasets'][0]['backgroundColor']);
+
+        // A long competency name is shortened on the axis, the bar keeps its full figure.
+        $this->assertStringStartsWith('Grundlagen der Zellatmung', $chart['labels'][0]);
+        $this->assertStringEndsWith('...', $chart['labels'][0]);
+        $this->assertSame(['Kurz (Mathematik)', 'Mittel (Mathematik)'], array_slice($chart['labels'], 1));
+    }
+
+    public function test_no_dashboard_shows_the_class_statistics(): void
+    {
+        // The student's "Mein Lernbereich": no class figures at all.
         $this->actingAs($this->students[0])
             ->get('/')
             ->assertOk()
             ->assertSee('Hallo Mia')
+            ->assertSee('Mein Lernbereich')
+            ->assertDontSee('Fehlerarten je Fach')
             ->assertDontSee('Abgabequote')
             ->assertDontSee('Statistik');
+
+        // Teacher and school administration land on their own start page; the class charts stay on the statistics page.
+        foreach ([$this->teacher, User::factory()->admin()->for($this->schoolClass->school)->create()] as $viewer) {
+            $this->actingAs($viewer)
+                ->get('/')
+                ->assertOk()
+                ->assertSee('Mein Lernbereich')
+                ->assertDontSee('Fehlerarten je Fach')
+                ->assertDontSee('Abgabequote');
+        }
     }
 
     /**

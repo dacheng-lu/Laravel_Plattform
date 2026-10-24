@@ -26,6 +26,13 @@ use Illuminate\Support\Facades\DB;
  */
 final class ClassStatistics
 {
+    /**
+     * Evaluated hand-ins already read for this viewer, keyed by whether Förderaufgaben are included.
+     *
+     * @var array<int, Collection<int, Submission>>
+     */
+    private array $evaluatedCache = [];
+
     private function __construct(
         private readonly SchoolClass $schoolClass,
         private readonly ?string $subject,
@@ -81,18 +88,22 @@ final class ClassStatistics
     }
 
     /**
+     * Every figure is a group figure: a value whose population is smaller than `statistics.min_group` students is
+     * withheld, so no single hand-in can be read out of it.
+     *
      * @return array{hand_in_rate: ?int, average_understanding: ?int, support_share: ?int, minutes_saved_per_week: ?int, evaluated_submissions: int}
      */
     public function kpis(): array
     {
+        $evaluatedHomework = $this->withUnderstandingScore($this->evaluatedSubmissions(includePracticeTasks: false));
         $evaluated = $this->evaluatedSubmissions(includePracticeTasks: true);
 
         return [
             'hand_in_rate' => $this->handInRate(),
-            'average_understanding' => $this->averageUnderstanding(),
-            'support_share' => $this->supportShare(),
-            'minutes_saved_per_week' => (int) round($evaluated->count() * (int) config('statistics.minutes_per_evaluation') / $this->weeks),
-            'evaluated_submissions' => $evaluated->count(),
+            'average_understanding' => $this->averageUnderstanding($evaluatedHomework),
+            'support_share' => $this->supportShare($evaluatedHomework),
+            'minutes_saved_per_week' => $this->minutesSavedPerWeek($evaluated),
+            'evaluated_submissions' => $this->evaluatedCount($evaluated),
         ];
     }
 
@@ -103,7 +114,7 @@ final class ClassStatistics
      */
     public function understandingTrend(): array
     {
-        $averages = $this->evaluatedSubmissions(includePracticeTasks: false)
+        $averages = $this->withUnderstandingScore($this->evaluatedSubmissions(includePracticeTasks: false))
             ->groupBy(fn (Submission $submission): int => (int) $submission->created_at->isoWeek)
             ->map(fn (Collection $ofWeek): ?int => $this->weekAverage($ofWeek));
 
@@ -117,8 +128,10 @@ final class ClassStatistics
     }
 
     /**
-     * Competency name to average answer score, alphabetically. A competency appears only when at least
-     * `statistics.min_group` students answered questions mapped to it.
+     * Competency label to average answer score, alphabetically. The label names the subject as well, because two
+     * subjects may use the same competency name; with a subject filter the subject is the same for every entry and
+     * stays off. A competency appears only when at least `statistics.min_group` students answered questions mapped
+     * to it.
      *
      * @return array<string, int>
      */
@@ -139,21 +152,34 @@ final class ClassStatistics
         }
 
         $rows = $answers
-            ->groupBy('competencies.id', 'competencies.name')
-            ->selectRaw('competencies.name as competency, avg(answers.score) as average, count(distinct submissions.student_id) as students')
+            ->groupBy('competencies.id', 'competencies.name', 'competencies.subject')
+            ->selectRaw('competencies.name as competency, competencies.subject as competency_subject, avg(answers.score) as average, count(distinct submissions.student_id) as students')
             ->get();
 
         $averages = [];
 
         foreach ($rows as $row) {
             if ((int) $row->students >= $this->minGroup()) {
-                $averages[(string) $row->competency] = (int) round((float) $row->average);
+                $averages[$this->competencyLabel((string) $row->competency, $row->competency_subject)] = (int) round((float) $row->average);
             }
         }
 
         ksort($averages, SORT_STRING);
 
         return $averages;
+    }
+
+    /**
+     * Competencies of different subjects may share a name, so the subject is part of the label; with a subject filter
+     * it is the same for every entry and stays off.
+     */
+    private function competencyLabel(string $name, ?string $subject): string
+    {
+        if ($this->subject !== null) {
+            return $name;
+        }
+
+        return $name.' ('.($subject ?? 'fachübergreifend').')';
     }
 
     /**
@@ -192,7 +218,13 @@ final class ClassStatistics
             }
 
             foreach ($answersOfSubject as $answer) {
-                $counts[(string) $answer->mistake_type]++;
+                $mistakeType = MistakeType::tryFrom((string) $answer->mistake_type);
+
+                if ($mistakeType === null) {
+                    continue;
+                }
+
+                $counts[$mistakeType->value]++;
             }
 
             $mistakes[(string) $subject] = $counts;
@@ -259,43 +291,78 @@ final class ClassStatistics
     }
 
     /**
-     * Handed-in homework over assigned students, across the homework that was due in the period and is closed;
-     * null while no homework was due.
+     * Handed-in homework over assigned students. Null while nothing was due or while fewer than
+     * `statistics.min_group` students were assigned to the homework, so the rate cannot expose a single hand-in.
      */
     private function handInRate(): ?int
     {
-        $lessons = $this->homework()
-            ->whereNotNull('due_on')
-            ->whereDate('due_on', '>=', $this->periodStart())
-            ->whereDate('due_on', '<', today())
-            ->withCount(['students', 'submissions'])
-            ->get();
-
+        $lessons = $this->dueHomework();
         $assigned = (int) $lessons->sum('students_count');
 
-        if ($assigned === 0) {
+        if ($assigned === 0 || $this->assignedStudentCount($lessons) < $this->minGroup()) {
             return null;
         }
 
         return (int) round($lessons->sum('submissions_count') / $assigned * 100);
     }
 
-    private function averageUnderstanding(): ?int
+    /**
+     * The homework that was due in the period and is closed, with its delegations and hand-ins counted.
+     *
+     * @return Collection<int, Lesson>
+     */
+    private function dueHomework(): Collection
     {
-        $average = $this->evaluatedSubmissions(includePracticeTasks: false)->avg('understanding_score');
+        return $this->homework()
+            ->whereNotNull('due_on')
+            ->whereDate('due_on', '>=', $this->periodStart())
+            ->whereDate('due_on', '<', today())
+            ->withCount(['students', 'submissions'])
+            ->get();
+    }
+
+    /**
+     * The students the given homework was delegated to, each counted once.
+     *
+     * @param  Collection<int, Lesson>  $lessons
+     */
+    private function assignedStudentCount(Collection $lessons): int
+    {
+        return DB::table('lesson_user')
+            ->whereIn('lesson_id', $lessons->modelKeys())
+            ->pluck('user_id')
+            ->unique()
+            ->count();
+    }
+
+    /**
+     * Average of the evaluated hand-ins; null while fewer than `statistics.min_group` students handed in.
+     *
+     * @param  Collection<int, Submission>  $submissions
+     */
+    private function averageUnderstanding(Collection $submissions): ?int
+    {
+        if ($this->distinctStudents($submissions) < $this->minGroup()) {
+            return null;
+        }
+
+        $average = $submissions->avg('understanding_score');
 
         return $average === null ? null : (int) round((float) $average);
     }
 
     /**
-     * Share of the students with evaluated homework whose own average lies below the support threshold. Null while
-     * fewer than `statistics.min_group` students have data.
+     * Share of the students with evaluated homework whose own average lies below the support threshold. Hand-ins
+     * without an understanding score carry no statement about the student and stay out. Null while fewer than
+     * `statistics.min_group` students have data.
+     *
+     * @param  Collection<int, Submission>  $submissions
      */
-    private function supportShare(): ?int
+    private function supportShare(Collection $submissions): ?int
     {
-        $averages = $this->evaluatedSubmissions(includePracticeTasks: false)
+        $averages = $this->withUnderstandingScore($submissions)
             ->groupBy('student_id')
-            ->map(fn (Collection $submissions): float => (float) $submissions->avg('understanding_score'));
+            ->map(fn (Collection $ofStudent): float => (float) $ofStudent->avg('understanding_score'));
 
         if ($averages->count() < $this->minGroup()) {
             return null;
@@ -304,6 +371,55 @@ final class ClassStatistics
         $supported = $averages->filter(fn (float $average): bool => $average < UnderstandingLevel::SUPPORT_THRESHOLD)->count();
 
         return (int) round($supported / $averages->count() * 100);
+    }
+
+    /**
+     * Correction time the evaluated hand-ins saved per week. Null while nothing was evaluated or while fewer than
+     * `statistics.min_group` students handed in.
+     *
+     * @param  Collection<int, Submission>  $submissions
+     */
+    private function minutesSavedPerWeek(Collection $submissions): ?int
+    {
+        if ($submissions->isEmpty() || $this->distinctStudents($submissions) < $this->minGroup()) {
+            return null;
+        }
+
+        return (int) round($submissions->count() * (int) config('statistics.minutes_per_evaluation') / $this->weeks);
+    }
+
+    /**
+     * Evaluated hand-ins of the group; 0 while fewer than `statistics.min_group` students handed in.
+     *
+     * @param  Collection<int, Submission>  $submissions
+     */
+    private function evaluatedCount(Collection $submissions): int
+    {
+        if ($this->distinctStudents($submissions) < $this->minGroup()) {
+            return 0;
+        }
+
+        return $submissions->count();
+    }
+
+    /**
+     * Only hand-ins with an understanding score say something about understanding. They build the population of the
+     * average and of the trend, and they are the students the minimum group is counted on.
+     *
+     * @param  Collection<int, Submission>  $submissions
+     * @return Collection<int, Submission>
+     */
+    private function withUnderstandingScore(Collection $submissions): Collection
+    {
+        return $submissions->whereNotNull('understanding_score')->values();
+    }
+
+    /**
+     * @param  Collection<int, Submission>  $submissions
+     */
+    private function distinctStudents(Collection $submissions): int
+    {
+        return $submissions->pluck('student_id')->unique()->count();
     }
 
     /**
@@ -327,13 +443,21 @@ final class ClassStatistics
      */
     private function evaluatedSubmissions(bool $includePracticeTasks): Collection
     {
+        $key = (int) $includePracticeTasks;
+
+        if (isset($this->evaluatedCache[$key])) {
+            return $this->evaluatedCache[$key];
+        }
+
         $lessons = $includePracticeTasks ? $this->lessons() : $this->homework();
 
-        return Submission::query()
+        $this->evaluatedCache[$key] = Submission::query()
             ->whereIn('lesson_id', $lessons->select('lessons.id'))
             ->whereNotNull('evaluated_at')
             ->where('created_at', '>=', $this->periodStart())
-            ->get();
+            ->get(['id', 'lesson_id', 'student_id', 'understanding_score', 'created_at', 'evaluated_at']);
+
+        return $this->evaluatedCache[$key];
     }
 
     /**

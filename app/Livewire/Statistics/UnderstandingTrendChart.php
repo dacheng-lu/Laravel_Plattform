@@ -38,6 +38,8 @@ class UnderstandingTrendChart extends StatisticsChart
                 [
                     'label' => 'Ø Verständnis',
                     'data' => array_values($trend),
+                    'tension' => 0.3,
+                    'spanGaps' => true,
                 ],
             ],
             'labels' => array_keys($trend),
