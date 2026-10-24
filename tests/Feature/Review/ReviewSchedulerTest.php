@@ -13,9 +13,13 @@ use App\Models\User;
 use App\QuestionType;
 use App\ReviewRating;
 use App\Support\ReviewScheduler;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use Mockery;
+use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
+use RuntimeException;
 use Tests\TestCase;
 
 /**
@@ -138,26 +142,29 @@ class ReviewSchedulerTest extends TestCase
 
         $rated = app(ReviewScheduler::class)->rate($item, ReviewRating::Knew)->refresh();
 
-        $this->assertSame(config('lernplattform.review.final_box'), $rated->box);
+        $finalBox = config('lernplattform.review.final_box');
+
+        $this->assertSame($finalBox, $rated->box);
         $this->assertSame(1, $rated->knew_count);
-        // Box 5 keeps its due date; the queue only asks for box < final_box, so it is not due any more.
+        // A settled item (box final_box) keeps its due date and counts as learnt. That "Heute wiederholen" then
+        // no longer lists it (only box < final_box is asked) is checked against the productive queue in the
+        // integration, not here.
         $this->assertSame('2026-10-24', $rated->due_on->toDateString());
-        $this->assertSame(0, ReviewItem::query()->where('box', '<', config('lernplattform.review.final_box'))->count());
+        $this->assertSame(now()->toDateTimeString(), $rated->last_reviewed_at?->toDateTimeString());
 
-        // Positivkontrolle: a box below the final box is still due.
-        $pending = ReviewItem::factory()->box(4)->due('2026-10-24')->create();
-        $this->assertSame(1, ReviewItem::query()->where('box', '<', config('lernplattform.review.final_box'))->count());
+        $ratedAt = $rated->last_reviewed_at?->toDateTimeString();
 
-        // Rating an already settled item changes nothing at all (fail closed).
+        // A day later a rating on the settled item changes nothing at all, not even the timestamp (fail closed).
+        $this->travelTo('2026-10-25 09:30:00');
+
         $again = app(ReviewScheduler::class)->rate($rated, ReviewRating::Forgot)->refresh();
 
-        $this->assertSame(config('lernplattform.review.final_box'), $again->box);
+        $this->assertSame($finalBox, $again->box);
         $this->assertSame('2026-10-24', $again->due_on->toDateString());
         $this->assertSame(1, $again->knew_count);
         $this->assertSame(0, $again->hard_count);
         $this->assertSame(0, $again->forgot_count);
-        $this->assertSame(now()->toDateTimeString(), $again->last_reviewed_at?->toDateTimeString());
-        $this->assertModelExists($pending);
+        $this->assertSame($ratedAt, $again->last_reviewed_at?->toDateTimeString());
     }
 
     public function test_disabled_or_unevaluated_creates_nothing(): void
@@ -201,6 +208,61 @@ class ReviewSchedulerTest extends TestCase
         config()->set('lernplattform.review.intervals', [1 => 1, 2 => 3, 3 => 7, 4 => 21]);
         $this->assertSame(2, app(ReviewScheduler::class)->scheduleForSubmission($submission));
         $this->assertSame(2, ReviewItem::query()->count());
+    }
+
+    public function test_a_broken_setting_is_reported_once_per_call(): void
+    {
+        $this->travelTo('2026-10-24 09:00:00');
+
+        // Three answered comprehension/application questions: a loop that looked the interval up per answer could
+        // report three times for one hand-in.
+        $submission = $this->evaluatedSubmissionWithThreeQuestions();
+
+        $this->mock(ExceptionHandler::class, fn (MockInterface $mock) => $mock->expects('report')
+            ->once()
+            ->with(Mockery::type(RuntimeException::class)));
+
+        config()->set('lernplattform.review.intervals', []);
+
+        $this->assertSame(0, app(ReviewScheduler::class)->scheduleForSubmission($submission));
+        $this->assertDatabaseEmpty('review_items');
+
+        // Positivkontrolle: with usable intervals the same hand-in creates its three items, and the "once" above
+        // still holds for both calls together – a working setting reports nothing.
+        config()->set('lernplattform.review.intervals', [1 => 1, 2 => 3, 3 => 7, 4 => 21]);
+
+        $this->assertSame(3, app(ReviewScheduler::class)->scheduleForSubmission($submission));
+        $this->assertSame(3, ReviewItem::query()->count());
+    }
+
+    public function test_a_broken_setting_stops_a_rating(): void
+    {
+        $this->travelTo('2026-10-24 08:00:00');
+
+        $item = ReviewItem::factory()->box(2)->due('2026-10-24')->create();
+
+        $this->mock(ExceptionHandler::class, fn (MockInterface $mock) => $mock->expects('report')
+            ->once()
+            ->with(Mockery::type(RuntimeException::class)));
+
+        // The settled box is unusable here, so the rating may not guess what to do with it.
+        config()->set('lernplattform.review.final_box', 'fünf');
+
+        $rated = app(ReviewScheduler::class)->rate($item, ReviewRating::Knew)->refresh();
+
+        $this->assertSame(2, $rated->box);
+        $this->assertSame('2026-10-24', $rated->due_on->toDateString());
+        $this->assertSame(0, $rated->knew_count);
+        $this->assertNull($rated->last_reviewed_at);
+
+        // Positivkontrolle: with a usable setting the very same rating moves the item on, without a further report.
+        config()->set('lernplattform.review.final_box', 5);
+
+        $moved = app(ReviewScheduler::class)->rate($rated, ReviewRating::Knew)->refresh();
+
+        $this->assertSame(3, $moved->box);
+        $this->assertSame(1, $moved->knew_count);
+        $this->assertSame('2026-10-31', $moved->due_on->toDateString());
     }
 
     public function test_hook_in_work_on_homework(): void
@@ -305,6 +367,28 @@ class ReviewSchedulerTest extends TestCase
         $submission = Submission::factory()->for($lesson)->for($student, 'student')->evaluated(70)->create();
         Answer::factory()->for($submission)->for($comprehension)->create(['answer' => 'Licht, Wasser und Kohlendioxid.']);
         Answer::factory()->for($submission)->for($application)->create(['answer' => 'Eine Pflanze im dunklen Zimmer wächst nicht.']);
+
+        return $submission;
+    }
+
+    /**
+     * An evaluated hand-in with three answered comprehension/application questions.
+     */
+    private function evaluatedSubmissionWithThreeQuestions(): Submission
+    {
+        $student = User::factory()->student()->create();
+        $lesson = Lesson::factory()->publishedFor([$student])->create();
+        $questions = [
+            $this->question($lesson, QuestionType::Comprehension, 1),
+            $this->question($lesson, QuestionType::Application, 2),
+            $this->question($lesson, QuestionType::Comprehension, 3),
+        ];
+
+        $submission = Submission::factory()->for($lesson)->for($student, 'student')->evaluated(70)->create();
+
+        foreach ($questions as $question) {
+            Answer::factory()->for($submission)->for($question)->create(['answer' => 'Licht, Wasser und Kohlendioxid.']);
+        }
 
         return $submission;
     }
