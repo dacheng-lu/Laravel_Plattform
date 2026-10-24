@@ -26,6 +26,13 @@ use Illuminate\Support\Facades\DB;
  */
 final class ClassStatistics
 {
+    /**
+     * Evaluated hand-ins already read for this viewer, keyed by whether Förderaufgaben are included.
+     *
+     * @var array<int, Collection<int, Submission>>
+     */
+    private array $evaluatedCache = [];
+
     private function __construct(
         private readonly SchoolClass $schoolClass,
         private readonly ?string $subject,
@@ -88,7 +95,7 @@ final class ClassStatistics
      */
     public function kpis(): array
     {
-        $evaluatedHomework = $this->evaluatedSubmissions(includePracticeTasks: false);
+        $evaluatedHomework = $this->withUnderstandingScore($this->evaluatedSubmissions(includePracticeTasks: false));
         $evaluated = $this->evaluatedSubmissions(includePracticeTasks: true);
 
         return [
@@ -107,7 +114,7 @@ final class ClassStatistics
      */
     public function understandingTrend(): array
     {
-        $averages = $this->evaluatedSubmissions(includePracticeTasks: false)
+        $averages = $this->withUnderstandingScore($this->evaluatedSubmissions(includePracticeTasks: false))
             ->groupBy(fn (Submission $submission): int => (int) $submission->created_at->isoWeek)
             ->map(fn (Collection $ofWeek): ?int => $this->weekAverage($ofWeek));
 
@@ -211,7 +218,13 @@ final class ClassStatistics
             }
 
             foreach ($answersOfSubject as $answer) {
-                $counts[(string) $answer->mistake_type]++;
+                $mistakeType = MistakeType::tryFrom((string) $answer->mistake_type);
+
+                if ($mistakeType === null) {
+                    continue;
+                }
+
+                $counts[$mistakeType->value]++;
             }
 
             $mistakes[(string) $subject] = $counts;
@@ -347,8 +360,7 @@ final class ClassStatistics
      */
     private function supportShare(Collection $submissions): ?int
     {
-        $averages = $submissions
-            ->whereNotNull('understanding_score')
+        $averages = $this->withUnderstandingScore($submissions)
             ->groupBy('student_id')
             ->map(fn (Collection $ofStudent): float => (float) $ofStudent->avg('understanding_score'));
 
@@ -391,6 +403,18 @@ final class ClassStatistics
     }
 
     /**
+     * Only hand-ins with an understanding score say something about understanding. They build the population of the
+     * average and of the trend, and they are the students the minimum group is counted on.
+     *
+     * @param  Collection<int, Submission>  $submissions
+     * @return Collection<int, Submission>
+     */
+    private function withUnderstandingScore(Collection $submissions): Collection
+    {
+        return $submissions->whereNotNull('understanding_score')->values();
+    }
+
+    /**
      * @param  Collection<int, Submission>  $submissions
      */
     private function distinctStudents(Collection $submissions): int
@@ -419,13 +443,21 @@ final class ClassStatistics
      */
     private function evaluatedSubmissions(bool $includePracticeTasks): Collection
     {
+        $key = (int) $includePracticeTasks;
+
+        if (isset($this->evaluatedCache[$key])) {
+            return $this->evaluatedCache[$key];
+        }
+
         $lessons = $includePracticeTasks ? $this->lessons() : $this->homework();
 
-        return Submission::query()
+        $this->evaluatedCache[$key] = Submission::query()
             ->whereIn('lesson_id', $lessons->select('lessons.id'))
             ->whereNotNull('evaluated_at')
             ->where('created_at', '>=', $this->periodStart())
-            ->get();
+            ->get(['id', 'lesson_id', 'student_id', 'understanding_score', 'created_at', 'evaluated_at']);
+
+        return $this->evaluatedCache[$key];
     }
 
     /**

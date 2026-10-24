@@ -51,6 +51,11 @@ class Statistics extends Page
         $this->schoolClassId ??= $visibleClasses->orderBy('name')->value('id');
 
         abort_unless($this->schoolClassId === null || $visibleClasses->whereKey($this->schoolClassId)->exists(), 403);
+
+        // The select offers exactly these periods, so a manipulated URL must not pick another one for the figures.
+        if (! in_array($this->weeks, (array) config('statistics.weeks'), true)) {
+            $this->weeks = (int) config('statistics.default_weeks');
+        }
     }
 
     /**

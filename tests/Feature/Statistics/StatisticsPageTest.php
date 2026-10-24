@@ -213,16 +213,35 @@ class StatisticsPageTest extends TestCase
             ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 65 && $kpis['evaluated_submissions'] === 6);
     }
 
+    public function test_an_unknown_period_in_the_url_falls_back_to_the_default(): void
+    {
+        Livewire::actingAs($this->teacher)
+            ->withQueryParams(['wochen' => 7])
+            ->test(Statistics::class)
+            ->assertOk()
+            ->assertSet('weeks', 10)
+            ->assertSet('schoolClassId', $this->schoolClass->id);
+
+        // Positive control: an offered period stays as chosen.
+        Livewire::actingAs($this->teacher)
+            ->withQueryParams(['wochen' => 4])
+            ->test(Statistics::class)
+            ->assertOk()
+            ->assertSet('weeks', 4);
+    }
+
     public function test_the_page_shows_no_individual_results(): void
     {
         $page = Livewire::actingAs($this->teacher)
             ->test(Statistics::class)
             ->assertOk()
             ->assertSee('Abgabequote')
-            ->assertDontSee('Mia Hoffmann')
-            ->assertDontSee('Ben Krüger')
             ->assertDontSee('Sofort gewusst')
             ->assertDontSee('Nicht gewusst');
+
+        foreach ($this->students as $student) {
+            $page->assertDontSee($student->name);
+        }
 
         $question = Question::factory()->for($this->firstLesson)->create();
 
@@ -232,12 +251,15 @@ class StatisticsPageTest extends TestCase
         }
 
         // Private self-assessments and free-topic sessions change nothing on the page.
-        Livewire::actingAs($this->teacher)
+        $page = Livewire::actingAs($this->teacher)
             ->test(Statistics::class)
             ->assertOk()
             ->assertSeeTextInOrder(['Abgabequote', '75 %', 'Ø Verständnis', '65 %', 'Anteil mit Förderbedarf', '33 %'])
-            ->assertDontSee('Mia Hoffmann')
             ->assertDontSee('Mein Hobby');
+
+        foreach ($this->students as $student) {
+            $page->assertDontSee($student->name);
+        }
     }
 
     /**
@@ -353,14 +375,27 @@ class StatisticsPageTest extends TestCase
         $this->assertSame(['Kurz (Mathematik)', 'Mittel (Mathematik)'], array_slice($chart['labels'], 1));
     }
 
-    public function test_the_student_dashboard_shows_no_statistics(): void
+    public function test_no_dashboard_shows_the_class_statistics(): void
     {
+        // The student's "Mein Lernbereich": no class figures at all.
         $this->actingAs($this->students[0])
             ->get('/')
             ->assertOk()
             ->assertSee('Hallo Mia')
+            ->assertSee('Mein Lernbereich')
+            ->assertDontSee('Fehlerarten je Fach')
             ->assertDontSee('Abgabequote')
             ->assertDontSee('Statistik');
+
+        // Teacher and school administration land on their own start page; the class charts stay on the statistics page.
+        foreach ([$this->teacher, User::factory()->admin()->for($this->schoolClass->school)->create()] as $viewer) {
+            $this->actingAs($viewer)
+                ->get('/')
+                ->assertOk()
+                ->assertSee('Mein Lernbereich')
+                ->assertDontSee('Fehlerarten je Fach')
+                ->assertDontSee('Abgabequote');
+        }
     }
 
     /**

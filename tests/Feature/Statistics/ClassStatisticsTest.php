@@ -186,6 +186,56 @@ class ClassStatisticsTest extends TestCase
         $this->assertSame(33, $this->statistics()->kpis()['support_share']);
     }
 
+    public function test_hand_ins_without_a_score_count_in_neither_average_nor_trend(): void
+    {
+        $physicsClass = SchoolClass::factory()
+            ->for(User::factory()->teacher()->for($this->schoolClass->school)->create(), 'teacher')
+            ->create(['name' => 'Statistik 11a']);
+        $teacher = $physicsClass->teacher;
+        $students = $this->createStudents($physicsClass, 3);
+        $competency = Competency::factory()->create(['subject' => 'Physik', 'name' => 'Kräfte']);
+
+        $lesson = Lesson::factory()->for($physicsClass)->for($teacher, 'teacher')->publishedFor($students)
+            ->create(['subject' => 'Physik', 'topic' => 'Kräfte und Bewegung', 'due_on' => today()->subDay()]);
+
+        $submissions = $students->mapWithKeys(fn (User $student): array => [
+            $student->id => $this->evaluatedSubmission($lesson, $student, 70),
+        ]);
+
+        // Two of the three hand-ins were checked, but only one of them carries an understanding score.
+        foreach ([$students[1], $students[2]] as $student) {
+            $submissions[$student->id]->forceFill(['understanding_score' => null])->save();
+        }
+
+        $question = Question::factory()->for($lesson)->for($competency)->create();
+
+        foreach ($students as $student) {
+            Answer::factory()->for($submissions[$student->id])->for($question)->create(['score' => null]);
+        }
+
+        $statistics = ClassStatistics::forViewer($teacher, $physicsClass->id);
+
+        $this->assertNull($statistics->kpis()['average_understanding']);
+        $this->assertNull($statistics->understandingTrend()['KW '.today()->isoWeek]);
+        $this->assertSame([], $statistics->competencyAverages());
+
+        // The gate counts the same students as the figure; the checked hand-ins without a score are still hand-ins.
+        $this->assertSame(3, $statistics->kpis()['evaluated_submissions']);
+
+        // Three scored hand-ins are a group, so the figures appear.
+        foreach ($submissions as $submission) {
+            $submission->forceFill(['understanding_score' => 60])->save();
+        }
+
+        Answer::query()->where('question_id', $question->id)->update(['score' => 90]);
+
+        $statistics = ClassStatistics::forViewer($teacher, $physicsClass->id);
+
+        $this->assertSame(60, $statistics->kpis()['average_understanding']);
+        $this->assertSame(60, $statistics->understandingTrend()['KW '.today()->isoWeek]);
+        $this->assertSame(['Kräfte (Physik)' => 90], $statistics->competencyAverages());
+    }
+
     public function test_the_trend_lists_every_week_of_the_period_and_hides_small_weeks(): void
     {
         $olderLesson = $this->publishedLesson('Mathematik', 'Zweisatz', today()->subWeeks(2), $this->students->take(3));
@@ -373,15 +423,7 @@ class ClassStatisticsTest extends TestCase
         $competency = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Bruchrechnen']);
         $question = Question::factory()->for($this->firstLesson)->for($competency)->create();
 
-        $statistics = $this->statistics();
-        $before = [
-            $statistics->kpis(),
-            $statistics->understandingTrend(),
-            $statistics->competencyAverages(),
-            $statistics->mistakeTypes(),
-            $statistics->handInRates(),
-            $statistics->explainItUsage(),
-        ];
+        $before = $this->allFigures();
 
         foreach ($this->students as $student) {
             ReviewItem::factory()->for($student, 'student')->for($question)->create([
@@ -391,7 +433,20 @@ class ClassStatisticsTest extends TestCase
             ]);
         }
 
-        $after = [
+        // A fresh instance reads the database again: the hand-ins are cached per instance only.
+        $this->assertSame($before, $this->allFigures());
+    }
+
+    /**
+     * Every figure of the page in one array, read by a fresh instance.
+     *
+     * @return array<int, mixed>
+     */
+    private function allFigures(): array
+    {
+        $statistics = $this->statistics();
+
+        return [
             $statistics->kpis(),
             $statistics->understandingTrend(),
             $statistics->competencyAverages(),
@@ -399,8 +454,6 @@ class ClassStatisticsTest extends TestCase
             $statistics->handInRates(),
             $statistics->explainItUsage(),
         ];
-
-        $this->assertSame($before, $after);
     }
 
     public function test_statistics_of_another_teachers_class_are_forbidden(): void
