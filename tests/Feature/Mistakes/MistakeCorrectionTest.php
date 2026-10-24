@@ -117,7 +117,12 @@ class MistakeCorrectionTest extends TestCase
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                'mistakes' => [$this->answer->getKey() => MistakeType::Procedure->value],
+                // A real save carries every answer of the form: the unchanged ones keep their current value.
+                'mistakes' => [
+                    $this->answer->getKey() => MistakeType::Procedure->value,
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
             ])
             ->assertNotified('Fehlerarten gespeichert');
 
@@ -129,7 +134,14 @@ class MistakeCorrectionTest extends TestCase
         // Only a hint: neither the answer's score nor the submission's understanding score change.
         $this->assertSame(30, $this->answer->score);
         $this->assertSame(60, $this->submission->refresh()->understanding_score);
-        // An answer outside this submission keeps the AI's classification.
+
+        // The unchanged answers of the same save keep the AI's classification, and an answer outside this submission
+        // is not part of the form at all.
+        $this->otherAnswer->refresh();
+        $this->assertSame(MistakeType::Procedure, $this->otherAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->otherAnswer->mistake_source);
+        $this->assertSame(65, $this->otherAnswer->mistake_confidence);
+
         $this->outsideAnswer->refresh();
         $this->assertSame(MistakeType::Concept, $this->outsideAnswer->mistake_type);
         $this->assertSame(MistakeSource::Demo, $this->outsideAnswer->mistake_source);
@@ -140,11 +152,16 @@ class MistakeCorrectionTest extends TestCase
             ->mountAction(TestAction::make(ViewAction::class)->table($this->submission))
             ->assertMountedActionModalSee(['Weg/Schritt falsch', 'Von der Lehrkraft eingeordnet']);
 
-        // Clearing the type keeps the teacher's decision recognisable and still touches no score.
+        // Clearing the type keeps the teacher's decision recognisable and still touches no score. The empty option is
+        // dehydrated to null, so it has to count as "no mistake type".
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                'mistakes' => [$this->answer->getKey() => ''],
+                'mistakes' => [
+                    $this->answer->getKey() => '',
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
             ]);
 
         $this->answer->refresh();
@@ -153,26 +170,64 @@ class MistakeCorrectionTest extends TestCase
         $this->assertSame(30, $this->answer->score);
     }
 
-    public function test_confirming_the_ai_type_makes_it_the_teachers_own_order(): void
+    public function test_an_unchanged_form_leaves_the_ai_classification_alone(): void
     {
-        // The teacher keeps the AI's "procedure": the type stays, but the classification is now theirs.
+        $action = TestAction::make('correctMistakes')->table($this->submission);
+
+        // Saving without a change: every select carries its current value, the unclassified one stays empty.
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
-            ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                'mistakes' => [$this->otherAnswer->getKey() => MistakeType::Procedure->value],
-            ]);
+            ->callAction($action, data: [
+                'mistakes' => [
+                    $this->answer->getKey() => MistakeType::Concept->value,
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
+            ])
+            ->assertNotified('Fehlerarten gespeichert');
+
+        // Fehlerpfad: ein unverändert gespeichertes Formular macht aus KI-Hinweisen keine Lehrkraft-Entscheidungen –
+        // weder Typ noch Quelle noch Konfidenz ändern sich.
+        $this->answer->refresh();
+        $this->assertSame(MistakeType::Concept, $this->answer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->answer->mistake_source);
+        $this->assertSame(72, $this->answer->mistake_confidence);
 
         $this->otherAnswer->refresh();
         $this->assertSame(MistakeType::Procedure, $this->otherAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->otherAnswer->mistake_source);
+        $this->assertSame(65, $this->otherAnswer->mistake_confidence);
+
+        // Die Antwort ohne Einordnung bleibt ohne Einordnung und ohne Quelle.
+        $this->plainAnswer->refresh();
+        $this->assertNull($this->plainAnswer->mistake_type);
+        $this->assertNull($this->plainAnswer->mistake_source);
+
+        // Eine Antwort einer anderen Abgabe steht in keinem Formular dieser Abgabe und bleibt unberührt.
+        $this->outsideAnswer->refresh();
+        $this->assertSame(MistakeType::Concept, $this->outsideAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->outsideAnswer->mistake_source);
+        $this->assertSame(70, $this->outsideAnswer->mistake_confidence);
+
+        // Positivkontrolle derselben Aktion: eine echte Änderung wird gespeichert, die unveränderte daneben nicht.
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->callAction($action, data: [
+                'mistakes' => [
+                    $this->answer->getKey() => MistakeType::Concept->value,
+                    $this->otherAnswer->getKey() => MistakeType::Concept->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
+            ]);
+
+        $this->otherAnswer->refresh();
+        $this->assertSame(MistakeType::Concept, $this->otherAnswer->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->otherAnswer->mistake_source);
         $this->assertNull($this->otherAnswer->mistake_confidence);
-        $this->assertSame(45, $this->otherAnswer->score);
 
-        // Kontrolle: an answer outside this submission is still the AI's classification.
-        $this->outsideAnswer->refresh();
-        $this->assertSame(MistakeSource::Demo, $this->outsideAnswer->mistake_source);
-        $this->assertSame(MistakeType::Concept, $this->outsideAnswer->mistake_type);
-        $this->assertSame(70, $this->outsideAnswer->mistake_confidence);
+        $this->answer->refresh();
+        $this->assertSame(MistakeSource::Demo, $this->answer->mistake_source);
+        $this->assertSame(72, $this->answer->mistake_confidence);
     }
 
     public function test_the_teacher_can_withdraw_the_mistake_type(): void
@@ -183,15 +238,26 @@ class MistakeCorrectionTest extends TestCase
             ->mountAction(TestAction::make(ViewAction::class)->table($this->submission))
             ->assertMountedActionModalSee(['Grundidee noch unklar', 'KI-Hinweis, kann falsch sein']);
 
+        // The empty option "Keine Fehlerart" is dehydrated to null: it withdraws the AI's type.
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                'mistakes' => [$this->answer->getKey() => ''],
+                'mistakes' => [
+                    $this->answer->getKey() => '',
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
             ]);
 
         $this->answer->refresh();
         $this->assertNull($this->answer->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
+        $this->assertNull($this->answer->mistake_confidence);
+
+        // The unchanged answer next to it keeps the AI's classification.
+        $this->otherAnswer->refresh();
+        $this->assertSame(MistakeType::Procedure, $this->otherAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->otherAnswer->mistake_source);
 
         // A withdrawn type is the teacher's decision, so it is not presented as an AI hint.
         Livewire::actingAs($this->teacher)
@@ -221,6 +287,8 @@ class MistakeCorrectionTest extends TestCase
                 'mistakes' => [
                     // Unchanged: the answer had no type before and gets none back.
                     $this->plainAnswer->getKey() => '',
+                    // Chosen as before: this answer keeps its AI hint, too.
+                    $this->answer->getKey() => MistakeType::Concept->value,
                     // Changed in the same save, so the action really runs and writes.
                     $this->otherAnswer->getKey() => MistakeType::Concept->value,
                 ],
@@ -240,11 +308,17 @@ class MistakeCorrectionTest extends TestCase
         $this->assertSame(MistakeSource::Teacher, $this->otherAnswer->mistake_source);
         $this->assertNull($this->otherAnswer->mistake_confidence);
 
-        // Und eine Antwort, die gar nicht im Formular stand, behält die Einordnung der KI.
+        // Die unverändert gespeicherte Antwort behält die Einordnung der KI …
         $this->answer->refresh();
         $this->assertSame(MistakeType::Concept, $this->answer->mistake_type);
         $this->assertSame(MistakeSource::Demo, $this->answer->mistake_source);
         $this->assertSame(72, $this->answer->mistake_confidence);
+
+        // … und eine Antwort einer anderen Abgabe steht in diesem Formular gar nicht.
+        $this->outsideAnswer->refresh();
+        $this->assertSame(MistakeType::Concept, $this->outsideAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->outsideAnswer->mistake_source);
+        $this->assertSame(70, $this->outsideAnswer->mistake_confidence);
     }
 
     public function test_correction_authorized(): void
@@ -283,6 +357,8 @@ class MistakeCorrectionTest extends TestCase
             ->callAction($action, data: [
                 'mistakes' => [
                     $this->answer->getKey() => MistakeType::Procedure->value,
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
                     $foreignAnswer->getKey() => MistakeType::OffTopic->value,
                 ],
             ]);
@@ -301,6 +377,8 @@ class MistakeCorrectionTest extends TestCase
 
         $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
+        $this->assertSame(MistakeType::Procedure, $this->otherAnswer->refresh()->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->otherAnswer->mistake_source);
 
         // Fehlerpfad im Livewire-Pfad: the student moved to another school, so the lesson's own teacher may not see
         // them any more – the component does not render the action at all, and a forced call writes nothing.
@@ -330,7 +408,11 @@ class MistakeCorrectionTest extends TestCase
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->assertSee('Fehlerart korrigieren')
             ->callAction($action, data: [
-                'mistakes' => [$this->answer->getKey() => MistakeType::OffTopic->value],
+                'mistakes' => [
+                    $this->answer->getKey() => MistakeType::OffTopic->value,
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
             ]);
 
         $this->assertSame(MistakeType::OffTopic, $this->answer->refresh()->mistake_type);
@@ -347,7 +429,11 @@ class MistakeCorrectionTest extends TestCase
             Livewire::actingAs($viewer)
                 ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
                 ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
-                    'mistakes' => [$this->answer->getKey() => MistakeType::OffTopic->value],
+                    'mistakes' => [
+                        $this->answer->getKey() => MistakeType::OffTopic->value,
+                        $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                        $this->plainAnswer->getKey() => '',
+                    ],
                 ]);
         } catch (Throwable) {
             // Refused either way: the caller asserts that nothing was written.

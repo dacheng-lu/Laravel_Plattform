@@ -173,11 +173,15 @@ class MistakeIntegrationTest extends TestCase
         $this->assertSame(MistakeType::Procedure, $secondAnswer->mistake_type);
         $this->assertSame(MistakeSource::Claude, $secondAnswer->mistake_source);
 
-        // The teacher's own order on the first answer. The form is keyed by answer id.
+        // The teacher's own order on the first answer. The form is keyed by answer id and carries every answer of the
+        // submission, the unchanged one with its current value.
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $lesson, 'pageClass' => EditLesson::class])
             ->callAction(TestAction::make('correctMistakes')->table($submission), data: [
-                'mistakes' => [$firstAnswer->getKey() => MistakeType::Concept->value],
+                'mistakes' => [
+                    $firstAnswer->getKey() => MistakeType::Concept->value,
+                    $secondAnswer->getKey() => MistakeType::Procedure->value,
+                ],
             ])
             ->assertNotified('Fehlerarten gespeichert');
 
@@ -185,6 +189,11 @@ class MistakeIntegrationTest extends TestCase
         $this->assertSame(MistakeType::Concept, $corrected->mistake_type);
         $this->assertSame(MistakeSource::Teacher, $corrected->mistake_source);
         $this->assertNull($corrected->mistake_confidence);
+
+        // The unchanged answer of the same save keeps the AI's classification.
+        $untouchedSecond = $this->answerOfQuestion($submission, $second);
+        $this->assertSame(MistakeType::Procedure, $untouchedSecond->mistake_type);
+        $this->assertSame(MistakeSource::Claude, $untouchedSecond->mistake_source);
 
         // A second evaluation of the same submission – the AI now names another type for the second answer. The
         // recorder reads the evaluation the assistant returns, keyed by question id.

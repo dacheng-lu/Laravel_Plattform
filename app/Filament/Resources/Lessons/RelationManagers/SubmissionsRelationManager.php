@@ -166,34 +166,33 @@ class SubmissionsRelationManager extends RelationManager
 
                         DB::transaction(function () use ($answers, $submitted): void {
                             foreach ($answers as $answer) {
-                                // Only the answers of this submission count: an id smuggled in from elsewhere is ignored.
+                                // Only the answers this submission's form offered count: an id smuggled in from
+                                // elsewhere is ignored.
                                 if (! array_key_exists($answer->getKey(), $submitted)) {
                                     continue;
                                 }
 
-                                // The form declares a select for every answer of this submission, so a request that does
-                                // not carry a value for one of them must leave that answer exactly as it is.
-                                $type = $submitted[$answer->getKey()] ?? null;
+                                $type = $submitted[$answer->getKey()];
 
-                                if ($type === null) {
+                                // "Keine Fehlerart" arrives as the empty option and is dehydrated to null; a missing
+                                // value means the same. An unknown value is no decision at all: the answer stays as it is.
+                                if ($type instanceof MistakeType) {
+                                    $mistakeType = $type;
+                                } elseif ($type === null || $type === '') {
+                                    $mistakeType = null;
+                                } elseif (is_string($type)) {
+                                    $mistakeType = MistakeType::tryFrom($type);
+
+                                    if ($mistakeType === null) {
+                                        continue;
+                                    }
+                                } else {
                                     continue;
                                 }
 
-                                $mistakeType = match (true) {
-                                    $type instanceof MistakeType => $type,
-                                    is_string($type) => MistakeType::tryFrom($type),
-                                    default => null,
-                                };
-
-                                // An unknown value is no decision at all; only the empty option withdraws a type.
-                                if ($mistakeType === null && $type !== '') {
-                                    continue;
-                                }
-
-                                // Nothing to decide: an answer that has no type and gets none back stays unclassified,
-                                // and a type the teacher already confirmed stays theirs.
-                                if ($mistakeType === $answer->mistake_type
-                                    && ($mistakeType === null || $answer->mistake_source === MistakeSource::Teacher)) {
+                                // Only a real change becomes the teacher's order: an unchanged form never turns an
+                                // AI's hint into a teacher's decision.
+                                if ($mistakeType === $answer->mistake_type) {
                                     continue;
                                 }
 
