@@ -19,10 +19,18 @@ use App\Models\User;
  * belongs to other people (classmates' hand-ins, students' content in a teacher's export).
  * The caller decides who may ask for whom (e.g. UserPolicy::view plus the school check). Pass the asking person as
  * `$viewer` whenever it is not the owner: then only what that person may see anyway is included, so a school
- * administration never receives a student's private "Erklär's mir" conversations.
+ * administration never receives a student's private "Erklär's mir" conversations. The same holds for the
+ * self-assessments of "Heute wiederholen": a foreign viewer is only told that such data exists, never its content.
  */
 class PersonalDataExport
 {
+    /**
+     * What somebody else gets instead of the student's own self-assessments: the fact that such data exists, no value.
+     * Only added when the student has review items at all, so the export says something true about this account.
+     */
+    private const string REVIEW_DATA_HINT = 'Zu diesem Konto sind Übungsdaten aus „Heute wiederholen“ gespeichert. '
+        .'Sie sind privat und nur über die eigene Datenauskunft im Konto der Schülerin bzw. des Schülers einsehbar.';
+
     /**
      * @return array<string, mixed>
      */
@@ -51,9 +59,13 @@ class PersonalDataExport
             $export['erklaer_mir_gespraeche'] = self::explanationSessions($user, $viewer);
 
             // Practice only, and only for the student: a school administration never receives individual
-            // self-assessments (they are worthless as soon as somebody else reads them).
+            // self-assessments (they are worthless as soon as somebody else reads them). The answer to the account
+            // holder's request must still be complete, so somebody else gets a hint that such data exists – without
+            // a single value, a box or a counter.
             if ($viewer->is($user)) {
                 $export['wiederholen'] = self::reviewItems($user);
+            } elseif ($user->reviewItems()->exists()) {
+                $export['wiederholen_hinweis'] = self::REVIEW_DATA_HINT;
             }
         }
 

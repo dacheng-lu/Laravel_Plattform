@@ -3,10 +3,12 @@
 namespace Tests\Feature\Review;
 
 use App\Filament\Pages\ReviewToday;
+use App\Models\Answer;
 use App\Models\Lesson;
 use App\Models\Question;
 use App\Models\ReviewItem;
 use App\Models\SchoolClass;
+use App\Models\Submission;
 use App\Models\User;
 use App\QuestionType;
 use App\ReviewRating;
@@ -133,10 +135,17 @@ class ReviewIntegrationTest extends TestCase
         $this->travelTo('2026-10-24 10:00:00 UTC');
 
         $student = $this->student();
-        $item = $this->dueItem($student, 'Was macht die Photosynthese mit dem Licht?');
+        // A really handed in and evaluated answer: the answers table is not empty, so the search below can hit.
+        [$item, $storedAnswer] = $this->answeredHomework($student);
+
         $ownAnswer = 'Meine eigene Antwort zur Photosynthese, nur für mich gedacht.';
 
         $this->assertGreaterThanOrEqual(12, mb_strlen($ownAnswer));
+        $this->assertNotSame($storedAnswer, $ownAnswer);
+
+        // Positivkontrolle first: the very search used below does find stored answer text.
+        $this->assertDatabaseHas('answers', ['answer' => $storedAnswer]);
+        $this->assertStringContainsString($storedAnswer, $this->storedRows('answers'));
 
         Livewire::actingAs($student)->test(ReviewToday::class)
             ->call('reveal')
@@ -145,10 +154,6 @@ class ReviewIntegrationTest extends TestCase
             ->call('rate', ReviewRating::Knew->value)
             ->assertSet('ownAnswer', '')
             ->assertDontSee($ownAnswer);
-
-        // Positivkontrolle: the search does find stored text – the question's prompt is in the database.
-        $this->assertStringContainsString($item->question->prompt, $this->storedRows('questions'));
-        $this->assertSame(1, DB::table('review_items')->count());
 
         // Every text column of the tables an answer could land in (see the migrations).
         foreach (['answer', 'feedback'] as $column) {
@@ -164,7 +169,9 @@ class ReviewIntegrationTest extends TestCase
         // review_items has no text column at all, so the whole row set is searched as JSON.
         $this->assertStringNotContainsString($ownAnswer, $this->storedRows('review_items'));
 
-        // The rating itself did arrive, so the negative checks above are not the checks of a dead end.
+        // The hand-in and the rating did arrive, so the negative checks above are not the checks of a dead end.
+        $this->assertSame(1, DB::table('answers')->count());
+        $this->assertSame($storedAnswer, DB::table('answers')->value('answer'));
         $this->assertSame(2, $item->refresh()->box);
     }
 
@@ -175,24 +182,20 @@ class ReviewIntegrationTest extends TestCase
         $student = $this->student();
         $item = $this->dueItem($student, 'Was macht die Photosynthese mit dem Licht?');
 
-        Livewire::actingAs($student)->test(ReviewToday::class)
+        // This browser opens the solution …
+        $page = Livewire::actingAs($student)->test(ReviewToday::class)
             ->call('reveal')
-            ->call('rate', ReviewRating::Knew->value)
-            ->assertSuccessful();
+            ->assertSet('revealed', true);
 
-        $item->refresh();
+        // … while a second tab (or the first click of a double click) has rated the card already.
+        $rated = app(ReviewScheduler::class)->rate($item, ReviewRating::Knew);
 
-        $this->assertSame(2, $item->box);
-        $ratedAt = $item->last_reviewed_at?->toDateTimeString();
+        $this->assertSame(2, $rated->box);
+        $ratedAt = $rated->last_reviewed_at?->toDateTimeString();
         $this->assertNotNull($ratedAt);
 
-        // The second click arrives with the state from before the first one: same card, solution revealed.
-        // That is no error for the student, it changes nothing.
-        Livewire::actingAs($student)->test(ReviewToday::class)
-            ->set('revealed', true)
-            ->set('itemId', $item->getKey())
-            ->call('rate', ReviewRating::Knew->value)
-            ->assertSuccessful();
+        // The click from the first browser arrives now: no error for the student, and no second box step.
+        $page->call('rate', ReviewRating::Knew->value)->assertSuccessful();
 
         $item->refresh();
 
@@ -247,6 +250,38 @@ class ReviewIntegrationTest extends TestCase
             ->box($box)
             ->due($dueOn ?? SchoolDay::today()->toDateString())
             ->create();
+    }
+
+    /**
+     * Homework that was really handed in, evaluated and answered, with a due card for its question.
+     *
+     * @return array{ReviewItem, string} the due card and the stored answer text
+     */
+    private function answeredHomework(User $student): array
+    {
+        $lesson = Lesson::factory()
+            ->for($student->schoolClass)
+            ->publishedFor([$student])
+            ->create();
+
+        $question = Question::factory()->for($lesson)->create([
+            'type' => QuestionType::Comprehension,
+            'prompt' => 'Was macht die Photosynthese mit dem Licht?',
+            'expected_answer' => self::SOLUTION,
+        ]);
+
+        $storedAnswer = 'Licht, Wasser und Kohlendioxid, dazu das Chlorophyll in den Blättern.';
+
+        $submission = Submission::factory()->for($lesson)->for($student, 'student')->evaluated(70)->create();
+        Answer::factory()->for($submission)->for($question)->create(['answer' => $storedAnswer]);
+
+        $item = ReviewItem::factory()
+            ->for($student, 'student')
+            ->for($question)
+            ->due(SchoolDay::today()->toDateString())
+            ->create();
+
+        return [$item, $storedAnswer];
     }
 
     /**

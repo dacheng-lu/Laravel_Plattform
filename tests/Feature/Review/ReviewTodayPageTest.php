@@ -17,6 +17,7 @@ use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Mockery\MockInterface;
 use Tests\TestCase;
+use Throwable;
 
 /**
  * The "Heute wiederholen" page: a few due questions per day, the solution only after the student asks for it, and no
@@ -148,14 +149,16 @@ class ReviewTodayPageTest extends TestCase
             Livewire::actingAs($stranger)->test(ReviewToday::class)->assertForbidden();
         }
 
-        // A foreign item id in the student's own browser reveals and rates nothing either.
+        // A foreign item id in the student's own browser reveals and rates nothing either: reveal() already fails on
+        // it, and rate() fails as well when a foreign id is pushed under a solution the student did reveal before.
         Livewire::actingAs($student)->test(ReviewToday::class)
             ->set('itemId', $foreign->getKey())
             ->call('reveal')
             ->assertForbidden();
 
         Livewire::actingAs($student)->test(ReviewToday::class)
-            ->set('revealed', true)
+            ->call('reveal')
+            ->assertSet('revealed', true)
             ->set('itemId', $foreign->getKey())
             ->call('rate', 'knew')
             ->assertForbidden();
@@ -204,6 +207,49 @@ class ReviewTodayPageTest extends TestCase
             ->call('rate', 'knew')
             ->assertSet('revealed', false)
             ->assertSet('ownAnswer', '');
+    }
+
+    public function test_the_client_cannot_reveal_the_solution_itself(): void
+    {
+        $student = $this->student();
+        $item = $this->dueItem($student, today()->toDateString());
+
+        // „revealed“ gehört dem Server: ein Client, der es selbst setzt, wird abgewiesen (Livewire\Attributes\Locked).
+        // Ohne diese Sperre könnte ein Browser die Lösung aufdecken und die Abfrage aus dem Kopf überspringen.
+        $page = Livewire::actingAs($student)->test(ReviewToday::class);
+        $rejected = false;
+
+        try {
+            $page->set('revealed', true);
+        } catch (Throwable) {
+            $rejected = true;
+        }
+
+        // Abgewiesen (Exception) oder wirkungslos (der Wert bleibt false) – beides schützt die Lösung. Fehlt die
+        // Sperre, setzt der Client den Wert und der Test scheitert hier.
+        $this->assertTrue($rejected || $page->get('revealed') === false, 'Ein Client darf „revealed“ nicht setzen.');
+
+        // Ohne reveal() zeigt die Seite die Lösung nicht und bewertet nichts.
+        Livewire::actingAs($student)->test(ReviewToday::class)
+            ->assertSet('revealed', false)
+            ->assertDontSee(self::SOLUTION)
+            ->call('rate', 'knew')
+            ->assertStatus(422);
+
+        $item->refresh();
+        $this->assertSame(1, $item->box);
+        $this->assertNull($item->last_reviewed_at);
+
+        // Positivkontrolle: der Server deckt über reveal() auf, danach zählt die Bewertung.
+        Livewire::actingAs($student)->test(ReviewToday::class)
+            ->call('reveal')
+            ->assertSet('revealed', true)
+            ->assertSee(self::SOLUTION)
+            ->call('rate', 'knew')
+            ->assertSet('revealed', false);
+
+        $this->assertSame(2, $item->refresh()->box);
+        $this->assertSame(1, $item->knew_count);
     }
 
     public function test_tenant_filter(): void

@@ -31,6 +31,14 @@ class ReviewSchedulerTest extends TestCase
 {
     use RefreshDatabase;
 
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Die aufgelöste Zeitzone gilt pro Prozess; jeder Test startet mit einer frischen Auflösung.
+        SchoolDay::flush();
+    }
+
     public function test_evaluation_creates_items_once(): void
     {
         $this->travelTo('2026-10-24 09:00:00');
@@ -214,6 +222,26 @@ class ReviewSchedulerTest extends TestCase
         $submission = $this->evaluatedSubmissionWithTwoQuestions();
         $this->assertSame(2, app(ReviewScheduler::class)->scheduleForSubmission($submission));
         $this->assertSame(['2026-10-26', '2026-10-26'], $this->dueDatesOf($submission));
+    }
+
+    public function test_an_unusable_school_time_zone_is_reported_once_per_request(): void
+    {
+        $this->travelTo('2026-10-24 22:30:00 UTC');
+
+        config()->set('lernplattform.timezone', 'Nicht/Gueltig');
+
+        // Die Auflösung passiert einmal pro Request, nicht pro Abfrage: sonst würde eine kaputte Einstellung
+        // bei jeder Fälligkeitsprüfung erneut gemeldet.
+        $this->mock(ExceptionHandler::class, fn (MockInterface $mock) => $mock->expects('report')
+            ->once()
+            ->with(Mockery::type(RuntimeException::class)));
+
+        for ($call = 0; $call < 3; $call++) {
+            $this->assertSame('2026-10-25', SchoolDay::today()->toDateString());
+        }
+
+        // Positivkontrolle: der Ersatz greift auch im zweiten Zugriff (Tagesbeginn in UTC).
+        $this->assertSame('2026-10-24 22:00:00', SchoolDay::startUtc()->toDateTimeString());
     }
 
     public function test_disabled_or_unevaluated_creates_nothing(): void

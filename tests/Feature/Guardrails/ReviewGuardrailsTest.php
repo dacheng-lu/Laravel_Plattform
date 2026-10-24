@@ -27,8 +27,7 @@ use Tests\TestCase;
 
 /**
  * Leitplanken of "Heute wiederholen" (issue #2): practice only, private to the student, nothing across schools,
- * fail closed. Written against the contract (K) and the signatures of lanes A1/A2, so it stays red until those are
- * merged – that is intended.
+ * fail closed.
  *
  * Every negative assertion has its positive control in the same test: the same data is shown where it belongs,
  * so a "not visible" can never come from an empty page.
@@ -187,10 +186,17 @@ class ReviewGuardrailsTest extends TestCase
         $this->assertArrayHasKey('sofort_gewusst', $own['wiederholen'][0]);
         $this->assertSame(1, collect($own['wiederholen'])->sum('sofort_gewusst'));
 
-        // Die Datenauskunft der Schulleitung (Fremd-Viewer und EditUser-Download) enthält keine Selbsteinschätzungen.
+        // Die Datenauskunft der Schulleitung (Fremd-Viewer und EditUser-Download) enthält keine Selbsteinschätzungen –
+        // aber den Hinweis, DASS solche Übungsdaten existieren: die Auskunft soll vollständig sein, ohne einen Wert.
         $forAdmin = PersonalDataExport::for($viewer, $admin);
         $this->assertArrayNotHasKey('wiederholen', $forAdmin);
         $this->assertSame('Mia Hoffmann', $forAdmin['konto']['name']);
+        $this->assertArrayHasKey('wiederholen_hinweis', $forAdmin);
+        $this->assertStringContainsString('privat', $forAdmin['wiederholen_hinweis']);
+
+        // Positivkontrolle: der Hinweis hängt an den Daten, nicht am Aufrufer – ohne Übungsdaten gibt es ihn nicht.
+        $withoutItems = User::factory()->student($schoolClass)->create(['name' => 'Nora Ohne']);
+        $this->assertArrayNotHasKey('wiederholen_hinweis', PersonalDataExport::for($withoutItems, $admin));
 
         $page = Livewire::actingAs($admin)
             ->test(EditUser::class, ['record' => $viewer->getRouteKey()])
@@ -199,8 +205,10 @@ class ReviewGuardrailsTest extends TestCase
 
         $this->assertStringContainsString('Mia Hoffmann', $content);
         $this->assertStringNotContainsString('"wiederholen"', $content);
+        // Der Hinweis nennt den Bereich, aber keine Übungsdaten: kein Feld, kein Zähler, keine Bewertung.
+        $this->assertStringContainsString('"wiederholen_hinweis"', $content);
 
-        foreach ([...$labels, 'Heute wiederholen'] as $hidden) {
+        foreach ([...$labels, 'zuletzt_wiederholt_am', 'sofort_gewusst', 'mit_muehe', 'nicht_gewusst'] as $hidden) {
             $this->assertStringNotContainsString($hidden, $content);
         }
     }

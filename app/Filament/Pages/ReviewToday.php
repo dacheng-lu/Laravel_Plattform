@@ -13,6 +13,7 @@ use Filament\Facades\Filament;
 use Filament\Pages\Page;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Support\Facades\Gate;
+use Livewire\Attributes\Locked;
 use UnitEnum;
 
 /**
@@ -40,7 +41,12 @@ class ReviewToday extends Page
     /** The question on screen; null when nothing is left for today. */
     public ?int $itemId = null;
 
-    /** The sample solution is only part of the response once the student asked for it. */
+    /**
+     * The sample solution is only part of the response once the student asked for it. Locked, because only the server
+     * decides that: a client that sets it itself would show itself the solution without asking (and could skip the
+     * answer-from-memory step), so Livewire rejects such an update.
+     */
+    #[Locked]
     public bool $revealed = false;
 
     /**
