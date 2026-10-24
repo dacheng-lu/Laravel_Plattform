@@ -156,6 +156,48 @@ class MistakeRecorderTest extends TestCase
         $this->assertSame(MistakeType::Incomplete, $this->answer($submission, 'second')->mistake_type);
     }
 
+    public function test_a_failing_cleanup_does_not_stop_the_next_answer(): void
+    {
+        app()->instance(MistakeClassifier::class, $this->classifier(
+            function (Question $question, Answer $answer): ?MistakeClassification {
+                if ($question->is($this->questions['first'])) {
+                    throw new RuntimeException('Klassifizierer nicht erreichbar');
+                }
+
+                return new MistakeClassification(MistakeType::Incomplete, 80, MistakeSource::Demo);
+            },
+        ));
+
+        $submission = $this->submission(
+            ['first' => 40, 'second' => 40],
+            ['first' => [
+                'mistake_type' => MistakeType::Concept,
+                'mistake_confidence' => 80,
+                'mistake_source' => MistakeSource::Demo,
+            ]],
+        );
+
+        $failing = $this->answer($submission, 'first');
+
+        // Cleaning up the first answer fails as well: its old hint can neither be kept nor removed.
+        Answer::updating(function (Answer $answer) use ($failing): void {
+            if ($answer->is($failing)) {
+                throw new RuntimeException('Aufräumen fehlgeschlagen');
+            }
+        });
+
+        try {
+            $this->record($submission);
+        } finally {
+            Answer::flushEventListeners();
+        }
+
+        $this->assertSame(MistakeType::Concept, $this->answer($submission, 'first')->mistake_type);
+
+        // Positivkontrolle: the next answer is still classified.
+        $this->assertSame(MistakeType::Incomplete, $this->answer($submission, 'second')->mistake_type);
+    }
+
     public function test_classifier_failure_fails_closed_over_work_on_homework(): void
     {
         app()->instance(MistakeClassifier::class, $this->classifier(
@@ -289,6 +331,33 @@ class MistakeRecorderTest extends TestCase
         $this->record($broken);
         $this->assertNull($this->answer($broken, 'first')->mistake_type);
         $this->assertNull($this->answer($broken, 'first')->mistake_source);
+    }
+
+    public function test_unusable_min_confidence_stores_nothing(): void
+    {
+        app()->instance(MistakeClassifier::class, $this->alwaysClassifying(
+            new MistakeClassification(MistakeType::Procedure, 70, MistakeSource::Demo),
+        ));
+
+        foreach (['null' => null, 'Text' => 'abc'] as $case => $value) {
+            config()->set('lernplattform.mistakes.min_confidence', $value);
+
+            $submission = $this->submission(['first' => 50]);
+
+            $this->record($submission);
+
+            $this->assertNull($this->answer($submission, 'first')->mistake_type, $case);
+            $this->assertNull($this->answer($submission, 'first')->mistake_source, $case);
+        }
+
+        // Positivkontrolle: with 0.6 the same answer and its confidence 70 are stored.
+        config()->set('lernplattform.mistakes.min_confidence', 0.6);
+        $stored = $this->submission(['first' => 50]);
+
+        $this->record($stored);
+
+        $this->assertSame(MistakeType::Procedure, $this->answer($stored, 'first')->mistake_type);
+        $this->assertSame(70, $this->answer($stored, 'first')->mistake_confidence);
     }
 
     public function test_unscored_answers_are_left_alone(): void

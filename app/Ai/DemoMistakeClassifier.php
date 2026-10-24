@@ -13,6 +13,9 @@ use App\Models\Question;
  * The rules run in the order of the spec. An empty answer is "no attempt", an answer far shorter than the expected
  * answer is "incomplete", an answer that shares not a single content word with the question and its expected answer
  * is "off topic". Everything else stays unclassified (null): an "unclear" beats a wrong label.
+ *
+ * The confidences 70 and 65 deliberately sit above the default `min_confidence` of 0.6, so the offline rules apply
+ * with the default configuration.
  */
 class DemoMistakeClassifier implements MistakeClassifier
 {
@@ -20,6 +23,12 @@ class DemoMistakeClassifier implements MistakeClassifier
      * Shorter words ("der", "und", "zu") carry no content on their own.
      */
     private const int MINIMUM_CONTENT_WORD_LENGTH = 4;
+
+    /**
+     * Two words count as the same when their first letters match, so inflections and derivations still count
+     * ("fotosynthetisch" for "Fotosynthese"); shorter words are compared whole.
+     */
+    private const int COMPARED_PREFIX_LENGTH = 5;
 
     public function classify(Question $question, Answer $answer): ?MistakeClassification
     {
@@ -45,7 +54,8 @@ class DemoMistakeClassifier implements MistakeClassifier
     }
 
     /**
-     * Lower-case words without punctuation, short ones dropped – the words that carry the content.
+     * Lower-case words without punctuation, short ones dropped – reduced to their first letters, so the words that
+     * carry the content are compared regardless of inflection and derivation.
      *
      * @return list<string>
      */
@@ -58,7 +68,12 @@ class DemoMistakeClassifier implements MistakeClassifier
             fn (string $word): bool => mb_strlen($word) >= self::MINIMUM_CONTENT_WORD_LENGTH,
         );
 
-        return array_values(array_unique($words));
+        $stems = array_map(
+            fn (string $word): string => mb_substr($word, 0, self::COMPARED_PREFIX_LENGTH),
+            $words,
+        );
+
+        return array_values(array_unique($stems));
     }
 
     private function wordCount(string $text): int

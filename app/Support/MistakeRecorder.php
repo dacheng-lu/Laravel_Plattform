@@ -46,7 +46,12 @@ class MistakeRecorder
                 // The evaluation stays stored and valid: only the hint for this one answer is lost.
                 report($exception);
 
-                $this->forget($answer);
+                try {
+                    $this->forget($answer);
+                } catch (Throwable $cleanupFailure) {
+                    // Cleaning up may fail as well (a failing write, a listener); the next answer is still handled.
+                    report($cleanupFailure);
+                }
             }
         }
     }

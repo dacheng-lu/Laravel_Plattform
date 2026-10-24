@@ -64,6 +64,15 @@ class DemoMistakeClassifierTest extends TestCase
         $this->assertNotSame(MistakeType::OffTopic, $this->classify('Pflanzen brauchen Licht und Wasser zum Wachsen.')?->type);
     }
 
+    public function test_a_derived_word_counts_as_the_same_content(): void
+    {
+        // "fotosynthetisch" is derived from the expected answer's "Fotosynthese"; nothing else overlaps.
+        $this->assertNull($this->classify('Hier passiert alles fotosynthetisch, das erklärt die grünen Blätter.'));
+
+        // Positivkontrolle: an answer without a shared stem stays "off topic".
+        $this->assertSame(MistakeType::OffTopic, $this->classify('Der Ausflug der Klasse ging in den Zoo zu den Elefanten.')?->type);
+    }
+
     public function test_a_matching_answer_stays_unclassified(): void
     {
         $this->assertNull($this->classify('Pflanzen brauchen Licht und Wasser sowie Kohlendioxid für die Fotosynthese.'));
