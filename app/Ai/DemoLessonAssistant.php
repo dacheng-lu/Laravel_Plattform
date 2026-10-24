@@ -160,6 +160,17 @@ class DemoLessonAssistant implements LessonAssistant
             ];
         }
 
+        // The group's most common mistake type decides the order and the wording; without one the draft stays as it is.
+        $questions = match ($mistakeType) {
+            MistakeType::Procedure => $this->applicationFirst($questions),
+            MistakeType::Concept => $this->explanationFirst($questions, $description === '' ? ($sentences[0] ?? "Schau dir die Stunde „{$topic}“ noch einmal an.") : $this->sentenceEnd($description)),
+            MistakeType::Incomplete => array_map(fn (array $question): array => [
+                ...$question,
+                'prompt' => 'Ergänze: '.$question['prompt'].' Formuliere den fehlenden Teil mit dem Satzanfang „… weil …“.',
+            ], $questions),
+            default => $questions,
+        };
+
         $focus = $terms === [] ? '' : ' Im Mittelpunkt stehen '.$this->quotedList(array_column(array_slice($terms, 0, 3), 'term')).'.';
         $recap = $sentences === [] ? '' : ' '.$this->expectedAnswer($sentences, array_slice($terms, 0, 2));
 
@@ -167,6 +178,47 @@ class DemoLessonAssistant implements LessonAssistant
             'summary' => "Diese Förderaufgabe übt die Kompetenz „{$competency->name}“ ({$subject})".($description === '' ? '.' : ": {$this->sentenceEnd($description)}")."{$focus}{$recap} Die Aufgaben werden Schritt für Schritt schwerer – nimm dir Zeit, du schaffst das!",
             'questions' => array_map(fn (array $question): array => [...$question, 'competency_id' => $competency->getKey()], $questions),
         ];
+    }
+
+    /**
+     * The application question first, worded as a worked path: the group got stuck on a step, not on the idea.
+     *
+     * @param  list<array<string, mixed>>  $questions
+     * @return list<array<string, mixed>>
+     */
+    private function applicationFirst(array $questions): array
+    {
+        foreach ($questions as $index => $question) {
+            if ($question['type'] !== QuestionType::Application) {
+                continue;
+            }
+
+            unset($questions[$index]);
+
+            return [[...$question, 'prompt' => 'Schritt für Schritt: '.$question['prompt']], ...array_values($questions)];
+        }
+
+        return $questions;
+    }
+
+    /**
+     * A short explanation of the idea before the first question builds on it.
+     *
+     * @param  list<array<string, mixed>>  $questions
+     * @return list<array<string, mixed>>
+     */
+    private function explanationFirst(array $questions, string $explanation): array
+    {
+        if ($questions === []) {
+            return $questions;
+        }
+
+        $first = $questions[0];
+        $first['type'] = QuestionType::Comprehension;
+        $first['prompt'] = 'Lies zuerst die kurze Erklärung: '.trim($explanation).' '.$first['prompt'];
+        $questions[0] = $first;
+
+        return $questions;
     }
 
     public function evaluateSubmission(Submission $submission): array
