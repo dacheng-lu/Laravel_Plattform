@@ -89,6 +89,18 @@ class PrivacyAndAiTest extends TestCase
     }
 
     #[DataProvider('roles')]
+    public function test_every_role_learns_that_a_mistake_type_is_stored_and_what_it_is_not(Role $role): void
+    {
+        $this->actingAs($this->userWith($role))
+            ->get('/datenschutz')
+            ->assertOk()
+            ->assertSee('Abgaben und KI-Einschätzung')
+            ->assertSee('Fehlerart einer nicht ganz richtigen Antwort und ihre Quelle (Demo-Regeln, KI oder Lehrkraft)')
+            ->assertSee('Die Fehlerart ist nur ein Hinweis zur Antwort, nicht zur Person')
+            ->assertSee('Sie ändert keine Punktzahl und erscheint nicht im Elternbericht');
+    }
+
+    #[DataProvider('roles')]
     public function test_the_ai_is_described_as_not_active_while_it_is_disabled(Role $role): void
     {
         config(['services.anthropic.enabled' => false, 'services.anthropic.model' => 'claude-test-modell']);

@@ -256,6 +256,18 @@ class LegalPagesTest extends TestCase
         }
     }
 
+    public function test_the_privacy_policy_explains_the_mistake_type_of_an_answer(): void
+    {
+        $this->get(route('legal.privacy'))
+            ->assertOk()
+            ->assertSee('Fehlerart')
+            ->assertSee('Grundidee noch unklar')
+            ->assertSee('Weg/Schritt falsch')
+            ->assertSee('Demo-Regeln, KI oder Lehrkraft')
+            ->assertSee('nicht zur Person')
+            ->assertSee('erscheint nicht im Elternbericht');
+    }
+
     public function test_the_privacy_policy_says_the_ai_connection_is_off_while_it_is_disabled(): void
     {
         config(['services.anthropic.enabled' => false]);

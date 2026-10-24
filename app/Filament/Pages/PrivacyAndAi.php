@@ -113,9 +113,12 @@ class PrivacyAndAi extends Page
             [
                 'title' => 'Abgaben und KI-Einschätzung',
                 'icon' => Heroicon::OutlinedChartBar,
-                'stored' => 'Die eigene Zusammenfassung, die Antworten, der Verständniswert von 0 bis 100, das Feedback und Hinweise, was noch wiederholt werden sollte.',
+                'stored' => 'Die eigene Zusammenfassung, die Antworten, der Verständniswert von 0 bis 100, das Feedback und Hinweise, was noch wiederholt werden sollte. Dazu die Fehlerart einer nicht ganz richtigen Antwort und ihre Quelle (Demo-Regeln, KI oder Lehrkraft).',
                 'viewers' => [[...$student, 'label' => 'Schüler:in selbst'], $teacher, $admin],
-                'notes' => ['Andere Schüler:innen sehen eine Abgabe nie.'],
+                'notes' => [
+                    'Die Fehlerart ist nur ein Hinweis zur Antwort, nicht zur Person: Sie ändert keine Punktzahl und erscheint nicht im Elternbericht.',
+                    'Andere Schüler:innen sehen eine Abgabe nie.',
+                ],
             ],
             [
                 'title' => '„Erklär’s mir“-Gespräche',

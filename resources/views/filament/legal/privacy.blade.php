@@ -500,6 +500,12 @@
         </li>
     </ul>
     <p>
+        <strong>Fehlerart:</strong> Bei einer Antwort, die nicht ganz richtig ist, kann die Plattform zusätzlich die
+        Fehlerart speichern: Grundidee noch unklar, Weg/Schritt falsch, unvollständig, am Thema vorbei oder kein
+        Versuch. Dazu hält sie die Quelle der Einordnung fest (Demo-Regeln, KI oder Lehrkraft). Die Fehlerart ist nur
+        ein Hinweis zur Antwort, nicht zur Person: Sie ändert keine Punktzahl und erscheint nicht im Elternbericht.
+    </p>
+    <p>
         Aus den gespeicherten Ergebnissen berechnet die Plattform eine Übersicht zum Lernstand und möglichem
         Förderbedarf je Klasse sowie einen druckbaren Bericht für Elterngespräche. Beides enthält nur, was bereits
         gespeichert ist.
