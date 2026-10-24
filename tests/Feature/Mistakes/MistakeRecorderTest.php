@@ -308,12 +308,17 @@ class MistakeRecorderTest extends TestCase
     }
 
     /**
+     * A hand-in with its own student from the same class, because submissions are unique per lesson and student and
+     * one test hands in more than once. The questions stay the ones of this lesson.
+     *
      * @param  array<string, int|null>  $scores  question name => score
      * @param  array<string, array<string, mixed>>  $attributes  question name => extra answer attributes
      */
     private function submission(array $scores, array $attributes = []): Submission
     {
-        $submission = Submission::factory()->for($this->lesson)->for($this->student, 'student')->create();
+        $classmate = User::factory()->student($this->student->schoolClass)->create();
+
+        $submission = Submission::factory()->for($this->lesson)->for($classmate, 'student')->create();
 
         foreach ($scores as $name => $score) {
             Answer::factory()->for($submission)->for($this->questions[$name])->create([
