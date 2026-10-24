@@ -260,10 +260,16 @@ class PrivacyDocumentsTest extends TestCase
 
             $this->assertStringContainsString('Erklär’s mir', $dsfa->getContent());
 
-            $this->get(PrivacyDocuments::getUrl(['document' => 'verzeichnis']))->assertOk()
+            $verzeichnis = $this->get(PrivacyDocuments::getUrl(['document' => 'verzeichnis']))->assertOk()
                 ->assertSee('Arbeitsblatt-Dateien')
-                ->assertSee('Gespräche in „Erklär’s mir“')
-                ->assertSee('ersetzt die Plattform vorher die Namen der Klasse');
+                ->assertSee('Gespräche in „Erklär’s mir“');
+
+            // The replacement of names is described in the third-country entry, which only exists while the AI is on.
+            if ($aiEnabled) {
+                $verzeichnis->assertSee('ersetzt die Plattform vorher die Namen der Klasse');
+            } else {
+                $verzeichnis->assertSee('Die KI-Anbindung ist ausgeschaltet');
+            }
         }
 
         config(['services.anthropic.enabled' => true]);
