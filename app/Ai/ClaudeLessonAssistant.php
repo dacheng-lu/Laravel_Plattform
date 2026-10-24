@@ -4,6 +4,7 @@ namespace App\Ai;
 
 use App\Filament\Pages\ExplainIt;
 use App\MessageAuthor;
+use App\MistakeType;
 use App\Models\Competency;
 use App\Models\ExplanationMessage;
 use App\Models\ExplanationSession;
@@ -72,7 +73,7 @@ class ClaudeLessonAssistant implements LessonAssistant
         ];
     }
 
-    public function draftPracticeTask(Competency $competency, string $subject, Collection $sourceLessons, array $gaps): array
+    public function draftPracticeTask(Competency $competency, string $subject, Collection $sourceLessons, array $gaps, ?MistakeType $mistakeType = null): array
     {
         $gapList = $gaps === [] ? 'Keine konkreten Hinweise vorhanden.' : collect($gaps)->map(fn (string $gap): string => "- {$gap}")->implode("\n");
         $lessons = $sourceLessons->map(fn (Lesson $lesson): string => implode("\n", array_filter([

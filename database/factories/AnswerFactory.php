@@ -2,6 +2,8 @@
 
 namespace Database\Factories;
 
+use App\MistakeSource;
+use App\MistakeType;
 use App\Models\Answer;
 use App\Models\Question;
 use App\Models\Submission;
@@ -26,5 +28,17 @@ class AnswerFactory extends Factory
             'score' => null,
             'feedback' => null,
         ];
+    }
+
+    /**
+     * A classified mistake on this answer; the confidence is only meaningful for the AI sources.
+     */
+    public function mistake(MistakeType $type, MistakeSource $source = MistakeSource::Demo, ?int $confidence = 80): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'mistake_type' => $type,
+            'mistake_confidence' => $confidence,
+            'mistake_source' => $source,
+        ]);
     }
 }

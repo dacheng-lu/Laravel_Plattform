@@ -7,6 +7,8 @@ use App\Models\Lesson;
 use App\Models\Question;
 use App\Models\Submission;
 use App\Models\User;
+use App\Support\MistakeRecorder;
+use App\Support\ReviewScheduler;
 use App\UnderstandingLevel;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -265,6 +267,8 @@ class WorkOnHomework extends Page
                     }
                 }
             });
+
+            $this->runFollowUps($submission, $evaluation);
         } catch (Throwable $exception) {
             report($exception);
 
@@ -272,6 +276,31 @@ class WorkOnHomework extends Page
         }
 
         return true;
+    }
+
+    /**
+     * Extras after a stored evaluation; each fails closed and never undoes the evaluation.
+     *
+     * @param  array<string, mixed>  $evaluation
+     */
+    private function runFollowUps(Submission $submission, array $evaluation): void
+    {
+        $followUps = [
+            function (Submission $fresh) use ($evaluation): void {
+                app(MistakeRecorder::class)->recordForSubmission($fresh, $evaluation);
+            },
+            function (Submission $fresh): void {
+                app(ReviewScheduler::class)->scheduleForSubmission($fresh);
+            },
+        ];
+
+        foreach ($followUps as $followUp) {
+            try {
+                $followUp($submission->fresh(['answers.question']));
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
     }
 
     /**
@@ -310,6 +339,8 @@ class WorkOnHomework extends Page
                         $this->plainText("answer_{$question->getKey()}", $answer?->answer, 'Deine Antwort'),
                         $this->plainText("answer_feedback_{$question->getKey()}", $answer?->feedback, 'Rückmeldung')
                             ->visible(filled($answer?->feedback)),
+                        $this->plainText("answer_mistake_{$question->getKey()}", $answer?->mistake_type?->feedbackHint(), 'Tipp')
+                            ->visible($answer?->mistake_type !== null),
                     ]);
             })->all(),
             Section::make($this->lesson->isPracticeTask() ? "So fasst deine Lehrkraft „{$this->competencyName()}“ zusammen" : 'So fasst deine Lehrkraft die Stunde zusammen')

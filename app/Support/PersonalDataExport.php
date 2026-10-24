@@ -7,6 +7,7 @@ use App\Models\Answer;
 use App\Models\ExplanationMessage;
 use App\Models\ExplanationSession;
 use App\Models\Lesson;
+use App\Models\ReviewItem;
 use App\Models\Submission;
 use App\Models\User;
 
@@ -48,6 +49,12 @@ class PersonalDataExport
             $export['zugewiesene_hausaufgaben'] = self::assignedHomework($user);
             $export['abgaben'] = self::submissions($user, $viewer);
             $export['erklaer_mir_gespraeche'] = self::explanationSessions($user, $viewer);
+
+            // Practice only, and only for the student: a school administration never receives individual
+            // self-assessments (they are worthless as soon as somebody else reads them).
+            if ($viewer->is($user)) {
+                $export['wiederholen'] = self::reviewItems($user);
+            }
         }
 
         if ($user->isTeacher()) {
@@ -106,6 +113,11 @@ class PersonalDataExport
                         'antwort' => $answer->answer,
                         'punkte' => $answer->score,
                         'rueckmeldung' => $answer->feedback,
+                        // Only listed when a mistake type was classified: answers without one keep the old shape.
+                        ...($answer->mistake_type === null ? [] : [
+                            'fehlerart' => $answer->mistake_type->getLabel(),
+                            'fehlerart_quelle' => $answer->mistake_source?->getLabel(),
+                        ]),
                     ])
                     ->values()
                     ->all(),
@@ -138,6 +150,33 @@ class PersonalDataExport
                         'gesendet_am' => $message->created_at?->toIso8601String(),
                     ])
                     ->all(),
+            ])
+            ->all();
+    }
+
+    /**
+     * The student's own "Heute wiederholen" state: one entry per question, with the counters only – single
+     * attempts are never stored and no self-assessment ever reaches a score.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function reviewItems(User $student): array
+    {
+        return $student->reviewItems()
+            ->with('question.lesson')
+            ->orderBy('due_on')
+            ->orderBy('id')
+            ->get()
+            ->map(fn (ReviewItem $item): array => [
+                'frage' => $item->question->prompt,
+                'fach' => $item->question->lesson->subject,
+                'thema' => $item->question->lesson->topic,
+                'box' => $item->box,
+                'faellig_am' => $item->due_on?->toDateString(),
+                'zuletzt_wiederholt_am' => $item->last_reviewed_at?->toIso8601String(),
+                'sofort_gewusst' => $item->knew_count,
+                'mit_muehe' => $item->hard_count,
+                'nicht_gewusst' => $item->forgot_count,
             ])
             ->all();
     }

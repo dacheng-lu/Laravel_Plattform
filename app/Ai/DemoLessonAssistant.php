@@ -3,6 +3,7 @@
 namespace App\Ai;
 
 use App\MessageAuthor;
+use App\MistakeType;
 use App\Models\Competency;
 use App\Models\ExplanationMessage;
 use App\Models\ExplanationSession;
@@ -115,7 +116,7 @@ class DemoLessonAssistant implements LessonAssistant
         ];
     }
 
-    public function draftPracticeTask(Competency $competency, string $subject, Collection $sourceLessons, array $gaps): array
+    public function draftPracticeTask(Competency $competency, string $subject, Collection $sourceLessons, array $gaps, ?MistakeType $mistakeType = null): array
     {
         $topics = $sourceLessons->pluck('topic')->filter()->unique()->values();
         $topicText = $topics->implode('. ');

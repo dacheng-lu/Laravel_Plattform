@@ -68,4 +68,42 @@ return [
         'final' => (bool) env('LERNPLATTFORM_DPA_FINAL', false),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | "Heute wiederholen" (spaced repetition)
+    |--------------------------------------------------------------------------
+    |
+    | After an evaluated submission the answered comprehension and application questions become review items in
+    | box 1. `intervals` maps each box to the number of days until it is due again, a `final_box` counts as settled
+    | (never asked again). `daily_limit` caps how many questions a student gets per day. `min_group` is reserved for
+    | a class overview later on: individual self-assessments are never shown to teachers or in the parents' report.
+    |
+    */
+
+    'review' => [
+        'enabled' => filter_var(env('LERNPLATTFORM_REVIEW_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'daily_limit' => (int) env('LERNPLATTFORM_REVIEW_DAILY_LIMIT', 5),
+        'intervals' => [1 => 1, 2 => 3, 3 => 7, 4 => 21],
+        'final_box' => 5,
+        'min_group' => 3,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Mistake types
+    |--------------------------------------------------------------------------
+    |
+    | Only answers below `threshold` (0–100) are classified, and only when the classifier's `min_confidence`
+    | (0–1) is reached – an "unclear" is better than a wrong label. `demo_short_ratio` is the share of the
+    | expected answer's length below which the offline rules call an answer "incomplete".
+    |
+    */
+
+    'mistakes' => [
+        'enabled' => filter_var(env('LERNPLATTFORM_MISTAKES_ENABLED', true), FILTER_VALIDATE_BOOLEAN),
+        'threshold' => (int) env('LERNPLATTFORM_MISTAKES_THRESHOLD', 80),
+        'min_confidence' => (float) env('LERNPLATTFORM_MISTAKES_MIN_CONFIDENCE', 0.6),
+        'demo_short_ratio' => 0.3,
+    ],
+
 ];

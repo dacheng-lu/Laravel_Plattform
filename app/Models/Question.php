@@ -44,6 +44,16 @@ class Question extends Model
     }
 
     /**
+     * "Heute wiederholen" entries of this question, one per student.
+     *
+     * @return HasMany<ReviewItem, $this>
+     */
+    public function reviewItems(): HasMany
+    {
+        return $this->hasMany(ReviewItem::class);
+    }
+
+    /**
      * @return array<string, string>
      */
     protected function casts(): array

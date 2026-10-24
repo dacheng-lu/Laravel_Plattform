@@ -3,11 +3,14 @@
 namespace App\Providers;
 
 use App\Ai\ClaudeLessonAssistant;
+use App\Ai\ClaudeMistakeClassifier;
 use App\Ai\ClaudeRecordingAnalyst;
 use App\Ai\DemoLessonAssistant;
+use App\Ai\DemoMistakeClassifier;
 use App\Ai\DemoRecordingAnalyst;
 use App\Ai\DemoTranscriber;
 use App\Ai\LessonAssistant;
+use App\Ai\MistakeClassifier;
 use App\Ai\RecordingAnalyst;
 use App\Ai\SpeechToTextTranscriber;
 use App\Ai\Transcriber;
@@ -41,6 +44,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(RecordingAnalyst::class, fn (): RecordingAnalyst => config('services.anthropic.enabled')
             ? $this->app->make(ClaudeRecordingAnalyst::class)
             : $this->app->make(DemoRecordingAnalyst::class));
+
+        // Mistake types: Claude names them in-band while it evaluates a submission, the offline rules stand in otherwise.
+        $this->app->bind(MistakeClassifier::class, fn (): MistakeClassifier => config('services.anthropic.enabled')
+            ? $this->app->make(ClaudeMistakeClassifier::class)
+            : $this->app->make(DemoMistakeClassifier::class));
     }
 
     /**

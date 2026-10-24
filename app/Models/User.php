@@ -128,6 +128,16 @@ class User extends Authenticatable implements FilamentUser
     }
 
     /**
+     * Questions this student practises again in "Heute wiederholen".
+     *
+     * @return HasMany<ReviewItem, $this>
+     */
+    public function reviewItems(): HasMany
+    {
+        return $this->hasMany(ReviewItem::class, 'student_id');
+    }
+
+    /**
      * @param  Builder<User>  $query
      */
     public function scopeWithRole(Builder $query, Role $role): void
