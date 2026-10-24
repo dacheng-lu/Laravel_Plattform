@@ -9,6 +9,7 @@ use App\Models\SchoolClass;
 use App\Models\User;
 use App\Role;
 use App\Support\LearningInsights;
+use App\Support\MistakeInsights;
 use App\Support\PracticeTasks;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -162,7 +163,7 @@ class LearningProgress extends Page
         $classes = LearningInsights::visibleClasses($user)->orderBy('name')->pluck('name', 'id');
 
         if ($this->schoolClassId === null) {
-            return ['classes' => $classes];
+            return ['classes' => $classes, 'mistakeDistribution' => []];
         }
 
         abort_unless($classes->has($this->schoolClassId), 403);
@@ -184,6 +185,8 @@ class LearningProgress extends Page
             'averages' => LearningInsights::competencyAverages($answers),
             'supportNeeds' => $supportNeeds,
             'supportCounts' => $supportCounts,
+            // Only the visible students' answers are counted, so a teacher never sees another school's mistakes.
+            'mistakeDistribution' => MistakeInsights::distributionByCompetency($students->modelKeys()),
             'supportCompetencies' => $competencies->filter(fn (Competency $competency): bool => $supportCounts->has($competency->id)),
             'practiceTasks' => PracticeTasks::forClass($user, $this->schoolClassId),
             'supportLessons' => Lesson::query()

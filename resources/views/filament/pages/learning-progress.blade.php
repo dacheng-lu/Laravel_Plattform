@@ -1,6 +1,7 @@
 @php
     use App\Filament\Pages\ParentReport;
     use App\Filament\Resources\Lessons\LessonResource;
+    use App\MistakeType;
     use App\UnderstandingLevel;
     use Filament\Support\Icons\Heroicon;
 @endphp
@@ -148,6 +149,21 @@
 
                                     {{ ($this->createPracticeTaskAction)(['competency' => $competency->id])->label($buttonLabel)->extraAttributes(['aria-label' => "{$buttonLabel} zu {$competency->name}"]) }}
                                 </div>
+
+                                @php
+                                    // Counted over the answers of this class only; an unknown value is dropped instead of breaking the page.
+                                    $mistakes = collect($mistakeDistribution[$competency->id] ?? [])
+                                        ->mapWithKeys(fn (int $count, string $value): array => ($type = MistakeType::tryFrom($value)) === null ? [] : [$type->getLabel() => $count])
+                                        ->sortDesc();
+                                @endphp
+
+                                @if ($mistakes->isNotEmpty())
+                                    <p wire:key="mistake-distribution-{{ $competency->id }}" class="text-sm text-gray-600 dark:text-gray-400">
+                                        Fehlerarten:
+                                        {{ $mistakes->map(fn (int $count, string $label): string => $count.'× '.$label)->join(', ') }}
+                                        <span class="text-xs">(KI-Hinweis, kann falsch sein)</span>
+                                    </p>
+                                @endif
 
                                 @foreach ($existingTasks as $task)
                                     <p wire:key="practice-task-{{ $task->id }}" class="text-sm text-gray-600 dark:text-gray-400">
