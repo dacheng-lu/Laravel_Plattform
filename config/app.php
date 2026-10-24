@@ -91,13 +91,13 @@ return [
     |
     | When demo mode is enabled the login form is prefilled with the demo
     | credentials and the database seeder creates the demo user. Both paths
-    | require a configured password, so a missing DEMO_PASSWORD fails closed
-    | and never produces a usable demo account.
+    | require a configured username and password, so a missing value fails
+    | closed and never produces a usable demo account.
     |
     */
 
     'demo' => [
-        'enabled' => (bool) env('DEMO_MODE', false),
+        'enabled' => filter_var(env('DEMO_MODE', false), FILTER_VALIDATE_BOOLEAN),
         'username' => env('DEMO_USERNAME', 'hackathon'),
         'password' => env('DEMO_PASSWORD'),
     ],

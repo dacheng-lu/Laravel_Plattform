@@ -1,8 +1,8 @@
 # Lernplattform
 
-Webbasierte Lernplattform für die SloppifAI-Ausbildung. Learner melden sich mit
-Benutzername und Passwort an und arbeiten danach in ihrem persönlichen
-Lernbereich weiter.
+Webbasierte Lernplattform für Schulen: Lehrkräfte stellen Inhalte aus dem
+Unterricht bereit, Schülerinnen und Schüler bearbeiten sie in ihrem persönlichen
+Lernbereich.
 
 ## Stack
 
@@ -10,7 +10,7 @@ Lernbereich weiter.
 - Filament 5 (Panel `lernplattform`, Login unter `/login`)
 - Vite 8, Tailwind CSS 4
 - PHPUnit 12 (kein Pest), Laravel Pint für den Code-Stil
-- Datenbank: SQLite lokal, MySQL/PostgreSQL im Betrieb
+- Datenbank: SQLite lokal, MySQL/MariaDB im Betrieb (das Image enthält nur pdo_mysql)
 
 ## Lokales Setup
 
@@ -24,8 +24,9 @@ aus `.env.example` an, erzeugt den App-Key, migriert die Datenbank und baut die
 Frontend-Assets. `composer run dev` startet den Entwicklungsserver inklusive
 Asset-Watcher.
 
-Der Login erwartet einen Benutzernamen, keine E-Mail-Adresse. Ein Benutzer kann
-über Filament oder per Seeder angelegt werden (siehe Demo-Login).
+Der Login erwartet einen Benutzernamen, keine E-Mail-Adresse. Eine
+Benutzerverwaltung gibt es noch nicht; Benutzer werden derzeit per
+`php artisan tinker` oder – nur für Demos – per Seeder angelegt.
 
 ## Tests und Code-Stil
 
@@ -56,12 +57,15 @@ prüft den Stil ohne zu schreiben, `vendor/bin/pint` korrigiert ihn.
 
 ### Demo-Login
 
-Nur wenn `DEMO_MODE=true` gesetzt ist **und** `DEMO_PASSWORD` einen Wert hat,
-belegt das Login-Formular die Zugangsdaten vor und der Seeder legt den
-Demo-Benutzer an. Fehlt eines von beidem, bleibt das Formular leer und es wird
-kein Benutzer erzeugt (fail closed).
+Nur wenn `DEMO_MODE` aktiv ist **und** `DEMO_USERNAME` sowie `DEMO_PASSWORD`
+einen Wert haben, belegt das Login-Formular die Zugangsdaten vor und der Seeder
+legt den Demo-Benutzer an. Fehlt eines davon, bleibt das Formular leer und es
+wird kein Benutzer erzeugt (fail closed). `DEMO_MODE` akzeptiert `true`, `1`,
+`on` und `yes`; jeder andere Wert bedeutet aus.
 
-> Warnung: Demo-Login niemals in einer Produktionsumgebung mit echten Learnern
+Ein bereits vorhandener Benutzer mit diesem Namen wird nicht verändert.
+
+> Warnung: Demo-Login niemals in einer Produktionsumgebung mit echten Lernenden
 > aktivieren. Die Zugangsdaten stehen im Klartext in der Umgebung und der
 > Zugang ist öffentlich erreichbar.
 
@@ -81,11 +85,15 @@ mit den Umgebungsvariablen aus der Tabelle oben.
 Das Image setzt `AUTORUN_ENABLED=true`, dadurch führen die Laravel-Automations
 von serversideup bei jedem Container-Start Migrationen und den
 Konfigurations-Cache aus. Den Demo-Benutzer nur bewusst und nur mit gesetztem
-`DEMO_MODE` sowie `DEMO_PASSWORD` per `php artisan db:seed --force` anlegen.
+`DEMO_MODE`, `DEMO_USERNAME` und `DEMO_PASSWORD` per `php artisan db:seed --force`
+anlegen.
+
+Migrationen laufen bei jedem Start automatisch. Destruktive Migrationen vor dem
+Merge prüfen; bei mehreren Replikas Migrationen nur in einer Instanz ausführen.
 
 ## Continuous Integration
 
 `.github/workflows/tests.yml` läuft bei jedem Push und jedem Pull Request:
 PHP 8.4, Node 22, `composer install`, Asset-Build, `vendor/bin/pint --test` und
-`php artisan test`. Ein Pull Request gilt erst als grün, wenn Stilprüfung und
-Tests durchlaufen.
+`php artisan test`. Der Status erscheint am Pull Request; als Pflicht-Check muss
+er per Branch-Protection aktiviert werden.

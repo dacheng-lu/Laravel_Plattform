@@ -13,20 +13,30 @@ class DatabaseSeeder extends Seeder
     /**
      * Seed the application's database.
      *
-     * The demo user is only created when demo mode is enabled and a demo
-     * password is configured.
+     * The demo user is only created when demo mode is enabled and both demo
+     * credentials are configured. Existing users are never overwritten.
      */
     public function run(): void
     {
-        if (! config('app.demo.enabled') || ! filled(config('app.demo.password'))) {
-            $this->command?->warn('Demo user skipped: set DEMO_MODE=true and DEMO_PASSWORD to create it.');
+        $username = config('app.demo.username');
+        $password = config('app.demo.password');
+
+        if (! config('app.demo.enabled') || ! filled($username) || ! filled($password)) {
+            $this->command?->warn('Demo user skipped: set DEMO_MODE=true, DEMO_USERNAME and DEMO_PASSWORD to create it.');
 
             return;
         }
 
-        User::updateOrCreate(
-            ['username' => config('app.demo.username')],
-            ['name' => 'Demo', 'password' => config('app.demo.password')],
-        );
+        if (User::where('username', $username)->exists()) {
+            $this->command?->warn("Demo user '{$username}' already exists and was left unchanged.");
+
+            return;
+        }
+
+        User::create([
+            'username' => $username,
+            'name' => 'Demo',
+            'password' => $password,
+        ]);
     }
 }

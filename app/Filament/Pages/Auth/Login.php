@@ -12,8 +12,8 @@ use SensitiveParameter;
 /**
  * Login with a username instead of Filament's default email field.
  *
- * The credentials are only prefilled when demo mode is enabled and a demo
- * password is configured; otherwise the form stays empty.
+ * The credentials are only prefilled when demo mode is enabled and both a demo
+ * username and a demo password are configured; otherwise the form stays empty.
  */
 class Login extends BaseLogin
 {
@@ -34,11 +34,13 @@ class Login extends BaseLogin
     }
 
     /**
-     * Demo mode is only active when it is explicitly enabled and a password is configured.
+     * Demo mode is only active when it is explicitly enabled and both demo credentials are configured.
      */
     private function isDemoModeEnabled(): bool
     {
-        return (bool) config('app.demo.enabled') && filled(config('app.demo.password'));
+        return (bool) config('app.demo.enabled')
+            && filled(config('app.demo.username'))
+            && filled(config('app.demo.password'));
     }
 
     /**
