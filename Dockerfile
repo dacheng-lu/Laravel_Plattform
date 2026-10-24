@@ -14,3 +14,6 @@ RUN npm ci && npm run build
 
 FROM app
 COPY --chown=www-data:www-data --from=assets /app/public/build /var/www/html/public/build
+
+# Run migrations etc. on container start (serversideup Laravel automations).
+ENV AUTORUN_ENABLED=true

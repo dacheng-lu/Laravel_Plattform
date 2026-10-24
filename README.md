@@ -1,58 +1,91 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Lernplattform
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Webbasierte Lernplattform für die SloppifAI-Ausbildung. Learner melden sich mit
+Benutzername und Passwort an und arbeiten danach in ihrem persönlichen
+Lernbereich weiter.
 
-## About Laravel
+## Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3+ / Laravel 13
+- Filament 5 (Panel `lernplattform`, Login unter `/login`)
+- Vite 8, Tailwind CSS 4
+- PHPUnit 12 (kein Pest), Laravel Pint für den Code-Stil
+- Datenbank: SQLite lokal, MySQL/PostgreSQL im Betrieb
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Lokales Setup
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer run setup
+composer run dev
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+`composer run setup` installiert die PHP- und Node-Abhängigkeiten, legt `.env`
+aus `.env.example` an, erzeugt den App-Key, migriert die Datenbank und baut die
+Frontend-Assets. `composer run dev` startet den Entwicklungsserver inklusive
+Asset-Watcher.
 
-## Contributing
+Der Login erwartet einen Benutzernamen, keine E-Mail-Adresse. Ein Benutzer kann
+über Filament oder per Seeder angelegt werden (siehe Demo-Login).
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+## Tests und Code-Stil
 
-## Code of Conduct
+```bash
+composer test
+vendor/bin/pint
+vendor/bin/pint --test
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Die Tests laufen mit einer In-Memory-SQLite-Datenbank. `vendor/bin/pint --test`
+prüft den Stil ohne zu schreiben, `vendor/bin/pint` korrigiert ihn.
 
-## Security Vulnerabilities
+## Umgebungsvariablen
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+| Variable | Zweck | Beispiel |
+| --- | --- | --- |
+| `APP_KEY` | Verschlüsselungsschlüssel, Pflicht | `php artisan key:generate` |
+| `APP_ENV` | Laufzeitumgebung | `production` |
+| `APP_DEBUG` | Debug-Ausgaben, im Betrieb `false` | `false` |
+| `APP_URL` | Basis-URL der Anwendung | `https://lernplattform.example` |
+| `APP_LOCALE` | UI-Sprache, Standard `de` | `de` |
+| `APP_FAKER_LOCALE` | Faker-Locale für Testdaten | `de_DE` |
+| `DB_CONNECTION` | Datenbanktreiber | `mysql` |
+| `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME`, `DB_PASSWORD` | Zugang zur Datenbank | `db`, `3306`, `lernplattform`, … |
+| `DEMO_MODE` | Demo-Login aktivieren, Standard `false` | `false` |
+| `DEMO_USERNAME` | Benutzername des Demo-Zugangs | `hackathon` |
+| `DEMO_PASSWORD` | Passwort des Demo-Zugangs, ohne Wert kein Demo-Login | – |
 
-## License
+### Demo-Login
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Nur wenn `DEMO_MODE=true` gesetzt ist **und** `DEMO_PASSWORD` einen Wert hat,
+belegt das Login-Formular die Zugangsdaten vor und der Seeder legt den
+Demo-Benutzer an. Fehlt eines von beidem, bleibt das Formular leer und es wird
+kein Benutzer erzeugt (fail closed).
+
+> Warnung: Demo-Login niemals in einer Produktionsumgebung mit echten Learnern
+> aktivieren. Die Zugangsdaten stehen im Klartext in der Umgebung und der
+> Zugang ist öffentlich erreichbar.
+
+Demo-Benutzer anlegen:
+
+```bash
+php artisan db:seed --force
+```
+
+## Deployment (Coolify)
+
+Das Repository enthält ein `Dockerfile` auf Basis von
+`serversideup/php:8.4-fpm-nginx`; die Assets werden in einem Node-Build-Stage
+erzeugt und ins finale Image kopiert. In Coolify genügt ein Dockerfile-Build
+mit den Umgebungsvariablen aus der Tabelle oben.
+
+Das Image setzt `AUTORUN_ENABLED=true`, dadurch führen die Laravel-Automations
+von serversideup bei jedem Container-Start Migrationen und den
+Konfigurations-Cache aus. Den Demo-Benutzer nur bewusst und nur mit gesetztem
+`DEMO_MODE` sowie `DEMO_PASSWORD` per `php artisan db:seed --force` anlegen.
+
+## Continuous Integration
+
+`.github/workflows/tests.yml` läuft bei jedem Push und jedem Pull Request:
+PHP 8.4, Node 22, `composer install`, Asset-Build, `vendor/bin/pint --test` und
+`php artisan test`. Ein Pull Request gilt erst als grün, wenn Stilprüfung und
+Tests durchlaufen.

@@ -12,7 +12,8 @@ use SensitiveParameter;
 /**
  * Login with a username instead of Filament's default email field.
  *
- * The form is prefilled with the seeded demo user's credentials (see DatabaseSeeder).
+ * The credentials are only prefilled when demo mode is enabled and a demo
+ * password is configured; otherwise the form stays empty.
  */
 class Login extends BaseLogin
 {
@@ -22,13 +23,22 @@ class Login extends BaseLogin
             ->components([
                 TextInput::make('username')
                     ->label('Benutzername')
-                    ->default('hackathon')
+                    ->default(fn (): ?string => $this->isDemoModeEnabled() ? config('app.demo.username') : null)
                     ->required()
                     ->autocomplete('username')
                     ->autofocus(),
-                $this->getPasswordFormComponent()->default('hackathon2026'),
+                $this->getPasswordFormComponent()
+                    ->default(fn (): ?string => $this->isDemoModeEnabled() ? config('app.demo.password') : null),
                 $this->getRememberFormComponent(),
             ]);
+    }
+
+    /**
+     * Demo mode is only active when it is explicitly enabled and a password is configured.
+     */
+    private function isDemoModeEnabled(): bool
+    {
+        return (bool) config('app.demo.enabled') && filled(config('app.demo.password'));
     }
 
     /**

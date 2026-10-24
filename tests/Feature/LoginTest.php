@@ -28,6 +28,8 @@ class LoginTest extends TestCase
 
     public function test_the_seeded_default_user_can_log_in_with_username(): void
     {
+        $this->enableDemoMode();
+
         $this->seed(DatabaseSeeder::class);
 
         Livewire::test(Login::class)
@@ -41,12 +43,16 @@ class LoginTest extends TestCase
 
     public function test_the_login_form_is_prefilled_with_the_demo_credentials(): void
     {
+        $this->enableDemoMode();
+
         Livewire::test(Login::class)
             ->assertFormSet(['username' => 'hackathon', 'password' => 'hackathon2026']);
     }
 
     public function test_a_wrong_password_is_rejected(): void
     {
+        $this->enableDemoMode();
+
         $this->seed(DatabaseSeeder::class);
 
         Livewire::test(Login::class)
@@ -55,5 +61,76 @@ class LoginTest extends TestCase
             ->assertHasFormErrors(['username']);
 
         $this->assertGuest();
+    }
+
+    public function test_the_login_form_is_empty_when_demo_mode_is_disabled(): void
+    {
+        config([
+            'app.demo.enabled' => false,
+            'app.demo.username' => 'hackathon',
+            'app.demo.password' => 'hackathon2026',
+        ]);
+
+        Livewire::test(Login::class)
+            ->assertFormSet(['username' => null, 'password' => null]);
+    }
+
+    public function test_the_login_form_is_empty_when_demo_password_is_missing(): void
+    {
+        config([
+            'app.demo.enabled' => true,
+            'app.demo.username' => 'hackathon',
+            'app.demo.password' => null,
+        ]);
+
+        Livewire::test(Login::class)
+            ->assertFormSet(['username' => null, 'password' => null]);
+    }
+
+    public function test_the_seeder_does_not_create_a_demo_user_when_demo_mode_is_disabled(): void
+    {
+        config([
+            'app.demo.enabled' => false,
+            'app.demo.username' => 'hackathon',
+            'app.demo.password' => 'hackathon2026',
+        ]);
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_the_seeder_does_not_create_a_demo_user_when_demo_password_is_missing(): void
+    {
+        config([
+            'app.demo.enabled' => true,
+            'app.demo.username' => 'hackathon',
+            'app.demo.password' => null,
+        ]);
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertDatabaseCount('users', 0);
+    }
+
+    public function test_the_seeder_creates_the_demo_user_in_demo_mode(): void
+    {
+        $this->enableDemoMode();
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertDatabaseHas('users', ['username' => 'hackathon']);
+    }
+
+    /**
+     * Enable demo mode with the credentials used by the tests.
+     */
+    private function enableDemoMode(): void
+    {
+        config([
+            'app.demo.enabled' => true,
+            'app.demo.username' => 'hackathon',
+            'app.demo.password' => 'hackathon2026',
+        ]);
     }
 }
