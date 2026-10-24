@@ -134,18 +134,10 @@ class ReviewTodayPageTest extends TestCase
         $beforeOwn = $this->storedState($own);
         $beforeForeign = $this->storedState($foreign);
 
-        // The student's item is a foreign one for everybody else: neither the page nor its two actions work for them.
+        // The student's item is a foreign one for everybody else. Their refusal already happens when the page mounts,
+        // and that closes reveal and rate with it: no mounted component, no action to call.
         foreach ([$teacher, $admin, $operator] as $stranger) {
-            Livewire::actingAs($stranger)->test(ReviewToday::class)
-                ->set('itemId', $own->getKey())
-                ->call('reveal')
-                ->assertForbidden();
-
-            Livewire::actingAs($stranger)->test(ReviewToday::class)
-                ->set('revealed', true)
-                ->set('itemId', $own->getKey())
-                ->call('rate', 'knew')
-                ->assertForbidden();
+            Livewire::actingAs($stranger)->test(ReviewToday::class)->assertForbidden();
         }
 
         // A foreign item id in the student's own browser reveals and rates nothing either.
