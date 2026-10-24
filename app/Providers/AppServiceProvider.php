@@ -14,6 +14,7 @@ use App\Ai\MistakeClassifier;
 use App\Ai\RecordingAnalyst;
 use App\Ai\SpeechToTextTranscriber;
 use App\Ai\Transcriber;
+use App\Support\SchoolDay;
 use Filament\Forms\Components\Select;
 use Filament\Support\Facades\FilamentView;
 use Filament\Tables\Columns\SelectColumn;
@@ -49,6 +50,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(MistakeClassifier::class, fn (): MistakeClassifier => config('services.anthropic.enabled')
             ? $this->app->make(ClaudeMistakeClassifier::class)
             : $this->app->make(DemoMistakeClassifier::class));
+
+        // The school day ("Heute wiederholen") is a calendar day in the school's time zone. Scoped, so the zone is
+        // resolved once per request or job: a broken setting is reported once, and a worker never carries the zone of
+        // an earlier job into the next one. See App\Support\SchoolDay.
+        $this->app->scoped(SchoolDay::BINDING, fn (): string => SchoolDay::resolveTimezone());
     }
 
     /**

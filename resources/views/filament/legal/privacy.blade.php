@@ -498,6 +498,14 @@
             bekommen Rückfragen. Gespeichert werden das Thema, der gesamte Gesprächsverlauf, der Verständniswert und das
             Feedback.
         </li>
+        <li>
+            <strong>„Heute wiederholen“ (Wiederholungskarten):</strong> Zu einer beantworteten Frage kann die Plattform
+            dieselbe Frage später erneut stellen. Je Frage speichert sie dafür die Wiederholungsstufe (Box 1 bis 5), das
+            nächste Fälligkeitsdatum, den Zeitpunkt der letzten Wiederholung und drei Zähler der Selbsteinschätzung:
+            sofort gewusst, mit Mühe, nicht gewusst. Nicht gespeichert werden die Antwort, die beim Wiederholen
+            eingetippt wird (sie bleibt im Browser der Schülerin oder des Schülers), einzelne Versuche und
+            Antwortzeiten. Für das Wiederholen setzt die Plattform keine KI ein.
+        </li>
     </ul>
     <p>
         Aus den gespeicherten Ergebnissen berechnet die Plattform eine Übersicht zum Lernstand und möglichem
@@ -541,6 +549,16 @@
                     <td><span class="legal-cell-label">Schüler:in</span> nur die eigenen</td>
                     <td><span class="legal-cell-label">Lehrkraft</span> nur Gespräche, die zu einer eigenen Stunde gehören</td>
                     <td><span class="legal-cell-label">Schuladministration (nur die eigene Schule)</span> alle</td>
+                    <td><span class="legal-cell-label">Plattform-Administration</span> keine Einsicht</td>
+                </tr>
+                <tr>
+                    <th scope="row">Wiederholungskarten mit Selbsteinschätzung („Heute wiederholen“)</th>
+                    <td><span class="legal-cell-label">Schüler:in</span> nur die eigenen</td>
+                    <td><span class="legal-cell-label">Lehrkraft</span> keine Einsicht</td>
+                    <td>
+                        <span class="legal-cell-label">Schuladministration (nur die eigene Schule)</span>
+                        keine Einzelwerte; die Datenauskunft enthält nur den Hinweis, dass Übungsdaten existieren
+                    </td>
                     <td><span class="legal-cell-label">Plattform-Administration</span> keine Einsicht</td>
                 </tr>
                 <tr>
@@ -609,6 +627,10 @@
         Der Verständniswert ist ein Hinweis darauf, wo Unterstützung nötig sein könnte. Er ist keine Note und keine
         Leistungsbewertung im schulrechtlichen Sinn. Lehrkräfte entscheiden selbst, ob und wie sie ihn nutzen. Über
         Förderung, Noten oder Versetzung entscheidet die Schule, nie die Plattform (siehe Abschnitt 7).
+    </p>
+    <p>
+        Die Selbsteinschätzung beim Wiederholen steuert nur, wann eine Frage wieder dran ist. Sie fließt nicht in den
+        Verständniswert, den Lernstand oder eine Note ein und erscheint nicht im Bericht für Elterngespräche.
     </p>
     <h3>Rechtsgrundlage</h3>
     <p>
@@ -746,8 +768,8 @@
         <li>
             <strong>Konten:</strong> Die Plattform löscht Konten nicht automatisch. Sie werden gelöscht, wenn sie nicht
             mehr gebraucht werden, auf Anfrage oder durch die Schule nach deren eigenen Aufbewahrungs- und Löschfristen.
-            Die Schuladministration kann Konten ihrer Schule löschen, dabei verschwinden auch die zugehörigen Abgaben und
-            Gespräche der Schüler:innen.
+            Die Schuladministration kann Konten ihrer Schule löschen, dabei verschwinden auch die zugehörigen Abgaben,
+            Gespräche und Wiederholungskarten der Schüler:innen.
         </li>
         <li>
             <strong>Unterrichts- und Lerndaten:</strong> Unterrichtsstunden mit ihren Fragen, Abgaben und Antworten sowie
@@ -755,6 +777,11 @@
             Aufbewahrungsfrist. Aufbewahrt werden {{ $keptPhrase }}. Lehrkräfte können Abgaben schon vorher löschen, etwa
             damit eine Hausaufgabe neu bearbeitet werden kann. Einzelne „Erklär’s mir“-Gespräche löschen wir auf Anfrage.
             Hochgeladene Arbeitsblätter entfernen wir auf Wunsch auch vom Server.
+        </li>
+        <li>
+            <strong>Wiederholungskarten („Heute wiederholen“):</strong> Sie hängen an der Frage und verschwinden mit
+            ihrer Unterrichtsstunde, also spätestens mit der Aufbewahrungsfrist ({{ $keptPhrase }}). Wird das Konto der
+            Schülerin oder des Schülers gelöscht, sind sie ebenfalls weg.
         </li>
         <li>
             <strong>Tonaufnahmen (nur mit dem optionalen Aufnahme-Modul):</strong> {{ $recordingDays }} Tage nach

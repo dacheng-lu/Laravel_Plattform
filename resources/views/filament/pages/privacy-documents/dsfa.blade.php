@@ -42,6 +42,13 @@
             'retention' => "Automatische Löschung nach {$schoolYearsKept} Schuljahren (das laufende eingerechnet).",
         ],
         [
+            'title' => 'Wiederholungskarten („Heute wiederholen“)',
+            'data' => 'Je beantworteter Frage die Wiederholungsstufe (Box 1 bis 5), das nächste Fälligkeitsdatum, der Zeitpunkt der letzten Wiederholung und drei Zähler der Selbsteinschätzung (sofort gewusst, mit Mühe, nicht gewusst). Nicht gespeichert: die beim Wiederholen eingetippte Antwort, einzelne Versuche, Antwortzeiten. Keine KI beteiligt.',
+            'people' => 'Schüler:innen',
+            'access' => 'Nur die Schüler:in selbst. Lehrkräfte und Schuladministration sehen keine Einzelwerte; die Datenauskunft der Schuladministration enthält nur den Hinweis, dass solche Übungsdaten existieren. Nie andere Schüler:innen.',
+            'retention' => "Mit der Frage und ihrer Unterrichtsstunde, also spätestens nach {$schoolYearsKept} Schuljahren (das laufende eingerechnet); mit dem Konto ebenso.",
+        ],
+        [
             'title' => 'Tonaufnahme einer Stunde (Aufnahme-Modul, optional)',
             'data' => 'Stimmen und Äußerungen aller, die im Raum sprechen. Dazu Beginn, Dauer, aufnehmende Lehrkraft und der Zeitpunkt der Bestätigung vor der Aufnahme. Gesprochenes kann zufällig auch besondere Kategorien nach Art. 9 DSGVO berühren (Gesundheit, Herkunft, Religion, Familie).',
             'people' => 'Schüler:innen (minderjährig), Lehrkraft, weitere anwesende Personen',
@@ -183,6 +190,7 @@
         'Rollen und Rechte' => [
             'Vier Rollen mit festen Rechten: Plattform-Administration, Schuladministration, Lehrkraft, Schüler:in. Die Prüfung erfolgt serverseitig bei jedem Abruf. Die Seite „Rollen & Rechte“ macht sie sichtbar.',
             'Aufnahmen gehören der Lehrkraft der Stunde allein: Hören, Herunterladen, Transkript, Auswertung und Löschen. Wechselt die Lehrkraft der Stunde, verliert die bisherige den Zugriff, ohne dass die neue ihn erhält.',
+            'Die Selbsteinschätzung beim Wiederholen sieht nur die Schüler:in selbst: keine Einsicht für Lehrkräfte und Schuladministration, keine Einzelwerte im Lernstand und im Elternbericht, in der Datenauskunft der Schule nur der Hinweis, dass solche Übungsdaten existieren.',
         ],
         'Einwilligung und Transparenz' => [
             'Aufnahmen sind für jede Schule zunächst ausgeschaltet. Die Schuladministration schaltet sie erst ein, nachdem sie fünf Punkte bestätigt hat (Folgenabschätzung, Personalrat, Eltern informiert, Einwilligungserklärung freigegeben, Aufbewahrungsfrist) und eine Einwilligungserklärung veröffentlicht hat. Die Plattform kann nicht prüfen, ob diese Bestätigungen stimmen. In einer Schule ohne Freischaltung lässt sie keine Aufnahme starten.',
@@ -198,6 +206,7 @@
             'Nur Ton, kein Video, kein Bild.',
             "Aufnahmen werden nach {$recordingDays} Tagen automatisch gelöscht (täglich, mit Aufräumen verwaister Dateien). Die Lehrkraft kann sie jederzeit selbst löschen.",
             "Unterrichtsstunden mit Abgaben und Gesprächen werden nach {$schoolYearsKept} Schuljahren automatisch gelöscht.",
+            'Beim Wiederholen wird die eingetippte Antwort nicht gespeichert. Gespeichert werden nur die Wiederholungsstufe, das Fälligkeitsdatum, der Zeitpunkt der letzten Wiederholung und drei Zähler der Selbsteinschätzung – keine einzelnen Versuche und keine Antwortzeiten.',
             'Auskunft und Datenübertragbarkeit: Jede Person kann ihre Daten im Profil herunterladen.',
         ],
         'KI und Dritte' => [
@@ -266,6 +275,9 @@
 <ul>
     <li>
         <strong>Lernplattform:</strong> Lehrkräfte halten fest, was sie im Unterricht behandelt haben, und verteilen daraus Hausaufgaben. Schüler:innen sehen, was sie schon verstanden haben und was sie noch üben sollten. Lehrkräfte erkennen Förderbedarf.
+    </li>
+    <li>
+        <strong>Wiederholen in Abständen („Heute wiederholen“):</strong> Beantwortete Fragen kommen in wachsenden Abständen erneut dran. Die Schüler:in antwortet zuerst aus dem Kopf, deckt dann die Musterlösung auf und schätzt sich selbst ein. Die Einschätzung steuert nur den Rhythmus und fließt nicht in Punkte, Verständniswerte, Lernstand, Noten oder den Elternbericht ein.
     </li>
     <li>
         <strong>Aufnahme-Modul (optional):</strong> Eine Lehrkraft nimmt den Ton einer Stunde auf, um daraus ein Transkript, eine Zusammenfassung und einen Tafelbild-Vorschlag für ihre Unterrichtsnotizen zu gewinnen. Die Aufnahme dient der Unterrichtsvor- und -nachbereitung der Lehrkraft. Sie dient nicht der Kontrolle von Schüler:innen oder Lehrkräften.

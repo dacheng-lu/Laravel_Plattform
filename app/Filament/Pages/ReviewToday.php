@@ -50,6 +50,13 @@ class ReviewToday extends Page
     public bool $revealed = false;
 
     /**
+     * The card whose solution was revealed. Locked and set by reveal() only, so a card that slips onto the page later
+     * can never be rated (or shown) on the strength of an earlier reveal.
+     */
+    #[Locked]
+    public ?int $revealedItemId = null;
+
+    /**
      * What the student typed: wird nie gespeichert; bleibt nur im Browser der Schülerin (Livewire-Zustand).
      * It is capped below and shown back to her on this page, never written to the database and never rated by anyone.
      */
@@ -76,34 +83,47 @@ class ReviewToday extends Page
     }
 
     /**
+     * Another card on screen: the solution of the previous one is no longer part of the response, and it is not rated
+     * on the strength of the earlier reveal.
+     */
+    public function updatedItemId(): void
+    {
+        $this->revealed = false;
+        $this->revealedItemId = null;
+    }
+
+    /**
      * Shows the sample solution of the current question.
      */
     public function reveal(): void
     {
-        $this->currentItem();
+        $item = $this->currentItem();
 
         $this->revealed = true;
+        $this->revealedItemId = $item->getKey();
     }
 
     /**
      * Takes the self-assessment, lets the scheduler move the item on and shows the next question.
      *
-     * A card that was already rated on this school day is not rated a second time: the second click of a double
-     * click, or a second tab, arrives with the state from before the first click, and that is no error for the
-     * student – the page simply shows what is still due.
+     * A card is rated only when the server revealed exactly this card. A card that was already rated on this school
+     * day is not rated a second time: the second click of a double click, or a second tab, arrives with the state
+     * from before the first click, and that is no error for the student – the page simply shows what is still due.
      */
     public function rate(string $rating): void
     {
         $reviewRating = ReviewRating::tryFrom($rating);
 
-        // Self-assessing needs the solution on screen and one of the three ratings.
-        if (! $this->revealed || $reviewRating === null) {
+        // One of the three ratings is needed, whatever the state of the page.
+        if ($reviewRating === null) {
             abort(422);
         }
 
+        // Already rated on this school day: nothing to do, and no error for the student.
         if ($this->ratedOnThisSchoolDay()) {
             $this->ownAnswer = '';
             $this->revealed = false;
+            $this->revealedItemId = null;
             $this->itemId = ReviewQueue::dueToday($this->student())->first()?->getKey();
 
             return;
@@ -111,10 +131,16 @@ class ReviewToday extends Page
 
         $item = $this->currentItem();
 
+        // Self-assessing needs the solution of this very card on screen; anything else would rate blind.
+        if (! $this->revealed || $this->revealedItemId !== $item->getKey()) {
+            abort(422);
+        }
+
         app(ReviewScheduler::class)->rate($item, $reviewRating);
 
         $this->ownAnswer = '';
         $this->revealed = false;
+        $this->revealedItemId = null;
         $this->itemId = ReviewQueue::dueToday($this->student())
             ->first(fn (ReviewItem $candidate): bool => $candidate->getKey() !== $item->getKey())?->getKey();
     }
@@ -131,8 +157,11 @@ class ReviewToday extends Page
         return [
             'item' => $item,
             'prompt' => $item?->question?->prompt,
-            // Before the reveal the solution is not part of the response at all, not merely hidden by CSS.
-            'expectedAnswer' => $this->revealed ? $item?->question?->expected_answer : null,
+            // Before the reveal the solution is not part of the response at all, not merely hidden by CSS – and only
+            // the card the server revealed shows it, never one that appeared on the page afterwards.
+            'expectedAnswer' => $this->revealed && $this->revealedItemId === $item?->getKey()
+                ? $item?->question?->expected_answer
+                : null,
             'remaining' => ReviewQueue::remainingToday($student),
             'dueCount' => ReviewQueue::dueCount($student),
             'maxOwnAnswer' => self::MAX_OWN_ANSWER_LENGTH,

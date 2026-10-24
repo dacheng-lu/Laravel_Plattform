@@ -9,6 +9,7 @@ use App\Models\ExplanationMessage;
 use App\Models\ExplanationSession;
 use App\Models\Lesson;
 use App\Models\Question;
+use App\Models\ReviewItem;
 use App\Models\SchoolClass;
 use App\Models\Submission;
 use App\Models\User;
@@ -101,6 +102,7 @@ class PruneLearningDataTest extends TestCase
             ->expectsTable(['Gegenstand', 'würde gelöscht'], [
                 ['Unterrichtsstunden', 1],
                 ['Fragen', 1],
+                ['Wiederholungskarten', 1],
                 ['Abgaben', 1],
                 ['Antworten', 1],
                 ['Erklär\'s-mir-Gespräche', 1],
@@ -125,6 +127,7 @@ class PruneLearningDataTest extends TestCase
             ->expectsTable(['Gegenstand', 'gelöscht'], [
                 ['Unterrichtsstunden', 1],
                 ['Fragen', 1],
+                ['Wiederholungskarten', 1],
                 ['Abgaben', 1],
                 ['Antworten', 1],
                 ['Erklär\'s-mir-Gespräche', 1],
@@ -137,6 +140,7 @@ class PruneLearningDataTest extends TestCase
         $this->assertModelMissing($expired['question']);
         $this->assertModelMissing($expired['submission']);
         $this->assertModelMissing($expired['answer']);
+        $this->assertModelMissing($expired['review']);
         $this->assertModelMissing($expired['session']);
         $this->assertDatabaseMissing('explanation_messages', ['explanation_session_id' => $expired['session']->id]);
         $this->assertDatabaseMissing('lesson_user', ['lesson_id' => $expired['lesson']->id]);
@@ -159,6 +163,7 @@ class PruneLearningDataTest extends TestCase
             ->expectsTable(['Gegenstand', 'gelöscht'], [
                 ['Unterrichtsstunden', 0],
                 ['Fragen', 0],
+                ['Wiederholungskarten', 0],
                 ['Abgaben', 0],
                 ['Antworten', 0],
                 ['Erklär\'s-mir-Gespräche', 0],
@@ -311,10 +316,12 @@ class PruneLearningDataTest extends TestCase
         $question = Question::factory()->for($lesson)->create();
         $submission = Submission::factory()->for($lesson)->for($student, 'student')->create(['created_at' => $date, 'updated_at' => $date]);
         $answer = Answer::factory()->for($submission)->for($question)->create();
+        // A repeat card hangs on the question, so it is part of what a lesson takes with it.
+        $review = ReviewItem::factory()->for($student, 'student')->for($question)->create();
         $session = ExplanationSession::factory()->for($student, 'student')->create(['created_at' => $date]);
         ExplanationMessage::factory()->count(2)->for($session, 'session')->create();
 
-        return compact('lesson', 'question', 'submission', 'answer', 'session');
+        return compact('lesson', 'question', 'submission', 'answer', 'review', 'session');
     }
 
     /**
@@ -322,7 +329,7 @@ class PruneLearningDataTest extends TestCase
      */
     private function rowCounts(): array
     {
-        return collect(['users', 'school_classes', 'schools', 'competencies', 'lessons', 'questions', 'submissions', 'answers', 'lesson_user', 'explanation_sessions', 'explanation_messages'])
+        return collect(['users', 'school_classes', 'schools', 'competencies', 'lessons', 'questions', 'submissions', 'answers', 'review_items', 'lesson_user', 'explanation_sessions', 'explanation_messages'])
             ->mapWithKeys(fn (string $table): array => [$table => DB::table($table)->count()])
             ->all();
     }

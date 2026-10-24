@@ -197,7 +197,8 @@ class LegalPagesTest extends TestCase
         $rows = array_filter(explode('</tr>', $body[1]), fn (string $row): bool => str_contains($row, '<th scope="row">'));
 
         $this->assertSame(['Daten', 'Schüler:in', 'Lehrkraft', 'Schuladministration (nur die eigene Schule)', 'Plattform-Administration'], $headers[1]);
-        $this->assertCount(8, $rows);
+        // Eight rows of learning data plus the repeat cards ("Heute wiederholen"), which have their own row.
+        $this->assertCount(9, $rows);
 
         foreach ($rows as $row) {
             $this->assertSame(4, substr_count($row, '<td>'), $row);

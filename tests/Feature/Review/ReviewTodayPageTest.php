@@ -252,6 +252,48 @@ class ReviewTodayPageTest extends TestCase
         $this->assertSame(1, $item->knew_count);
     }
 
+    public function test_only_the_card_whose_solution_was_revealed_can_be_rated(): void
+    {
+        $student = $this->student();
+
+        // Two of the student's own cards are due; A is the older one and stands first.
+        $a = $this->dueItem($student, today()->subDays(2)->toDateString(), 'Frage A zur Photosynthese', 'Antwortmuster A der Photosynthese.');
+        $b = $this->dueItem($student, today()->subDay()->toDateString(), 'Frage B zur Photosynthese', 'Antwortmuster B der Photosynthese.');
+
+        $page = Livewire::actingAs($student)->test(ReviewToday::class)
+            ->assertSet('itemId', $a->getKey())
+            ->call('reveal')
+            ->assertSet('revealed', true)
+            ->assertSee('Antwortmuster A der Photosynthese.');
+
+        // The client pushes another own card under the revealed solution: B stays closed, and B is not rated.
+        $page->set('itemId', $b->getKey())
+            ->assertDontSee('Antwortmuster B der Photosynthese.')
+            ->call('rate', 'knew')
+            ->assertStatus(422);
+
+        foreach ([$a, $b] as $untouched) {
+            $untouched->refresh();
+            $this->assertSame(1, $untouched->box);
+            $this->assertSame(0, $untouched->knew_count);
+            $this->assertNull($untouched->last_reviewed_at);
+        }
+
+        // Positivkontrolle: after the server revealed B itself, the very same card can be rated.
+        Livewire::actingAs($student)->test(ReviewToday::class)
+            ->set('itemId', $b->getKey())
+            ->call('reveal')
+            ->assertSet('revealed', true)
+            ->assertSee('Antwortmuster B der Photosynthese.')
+            ->call('rate', 'knew')
+            ->assertSet('revealed', false);
+
+        $b->refresh();
+        $this->assertSame(2, $b->box);
+        $this->assertSame(1, $b->knew_count);
+        $this->assertNotNull($b->last_reviewed_at);
+    }
+
     public function test_tenant_filter(): void
     {
         $ownClass = SchoolClass::factory()->create();

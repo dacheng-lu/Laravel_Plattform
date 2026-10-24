@@ -213,7 +213,7 @@ class ReviewGuardrailsTest extends TestCase
         }
     }
 
-    public function test_a_class_change_takes_the_foreign_questions_out_of_the_queue(): void
+    public function test_a_school_change_takes_the_foreign_questions_out_of_the_queue(): void
     {
         $schoolClass = SchoolClass::factory()->create(['name' => 'Klasse 7b']);
         $student = User::factory()->student($schoolClass)->create();

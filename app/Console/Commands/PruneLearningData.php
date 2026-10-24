@@ -7,6 +7,7 @@ use App\Models\ExplanationMessage;
 use App\Models\ExplanationSession;
 use App\Models\Lesson;
 use App\Models\Question;
+use App\Models\ReviewItem;
 use App\Models\Submission;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Attributes\Description;
@@ -21,7 +22,8 @@ use Illuminate\Support\Facades\Storage;
  * Storage limitation (Art. 5 and 17 DSGVO): deletes lessons and "Erklär's mir" conversations older than the
  * configured number of school years. A lesson expires only when everything about it is older than the cut-off
  * (lesson date, last change, due date, newest hand-in), so current work is never lost to a mistyped date.
- * Questions, hand-ins, answers, messages and homework assignments go with them through the foreign keys. Users, classes, schools and the competency framework are never touched.
+ * Questions, hand-ins, answers, messages, repeat cards ("Heute wiederholen") and homework assignments go with them
+ * through the foreign keys. Users, classes, schools and the competency framework are never touched.
  */
 #[Signature('lernplattform:prune-learning-data {--dry-run : Nur zählen, nichts löschen}')]
 #[Description('Löscht Unterrichtsstunden und Erklär\'s-mir-Gespräche, die älter als die Aufbewahrungsfrist sind')]
@@ -51,12 +53,16 @@ class PruneLearningData extends Command
             ->whereDoesntHave('submissions', fn (Builder $query) => $query->where('updated_at', '>=', $cutoff));
         $oldSessions = fn (): Builder => ExplanationSession::query()->where('created_at', '<', $cutoff);
         $oldSubmissions = fn (): Builder => Submission::query()->whereIn('lesson_id', $oldLessons()->select('id'));
+        $oldQuestions = fn (): Builder => Question::query()->whereIn('lesson_id', $oldLessons()->select('id'));
+        // Repeat cards hang on the question, so they vanish with the lesson; counted here, before the delete.
+        $oldReviewItems = fn (): Builder => ReviewItem::query()->whereIn('question_id', $oldQuestions()->select('id'));
 
         $files = $oldLessons()->whereNotNull('attachments')->pluck('attachments')->flatten()->filter(fn (mixed $path): bool => is_string($path))->unique();
 
         $counts = [
             'Unterrichtsstunden' => $oldLessons()->count(),
-            'Fragen' => Question::query()->whereIn('lesson_id', $oldLessons()->select('id'))->count(),
+            'Fragen' => $oldQuestions()->count(),
+            'Wiederholungskarten' => $oldReviewItems()->count(),
             'Abgaben' => $oldSubmissions()->count(),
             'Antworten' => Answer::query()->whereIn('submission_id', $oldSubmissions()->select('id'))->count(),
             'Erklär\'s-mir-Gespräche' => $oldSessions()->count(),

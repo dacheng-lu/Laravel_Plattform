@@ -27,6 +27,7 @@
 <ul>
     <li>Name, Benutzername, Klasse und auf Wunsch eine E-Mail-Adresse. Das Passwort wird nur verschlüsselt (als Hash) gespeichert.</li>
     <li>Was Ihr Kind abgibt: Zusammenfassungen, Antworten auf Hausaufgaben und Gespräche mit der Übungsfigur „Erklär’s mir“.</li>
+    <li>Beim Üben („Heute wiederholen“): Nach einer Abgabe kann Ihr Kind einzelne Fragen später noch einmal beantworten. Die Plattform merkt sich dafür nur, wann eine Frage wieder dran ist (Wiederholungsstufe 1 bis 5) und wie sicher sich Ihr Kind selbst eingeschätzt hat: sofort gewusst, mit Mühe oder nicht gewusst. Was Ihr Kind beim Wiederholen eintippt, wird nicht gespeichert, und es ist keine KI beteiligt.</li>
     <li>Das Ergebnis der Auswertung: ein Verständniswert von 0 bis 100 mit Rückmeldung. Er ist ein Hinweis, wo Unterstützung nötig sein könnte, und keine Note.</li>
     <li>Technische Daten, die beim Anmelden anfallen, etwa die Sitzungskennung und die IP-Adresse.</li>
 </ul>
@@ -38,6 +39,7 @@
     <li>Lehrkräfte sehen die Abgaben und Ergebnisse zu ihren Stunden, und für die Klassen, die sie leiten oder unterrichten, den Lernstand der Schüler:innen.</li>
     <li>Die Schuladministration der Schule kann die Daten der Schule einsehen, mit zwei Ausnahmen: Aufnahmen (siehe Abschnitt 7) und Gespräche in „Erklär’s mir“ zu einem frei gewählten Thema.</li>
     <li>Andere Schüler:innen und andere Schulen sehen nie etwas. Die Plattform-Administration des Betreibers sieht keine Unterrichts- und Lerndaten.</li>
+    <li>Die Einschätzung beim Wiederholen („Heute wiederholen“) sieht nur Ihr Kind. Lehrkräfte und Schulleitung sehen diese Werte nicht; sie zählen nicht als Note und erscheinen nicht im Bericht für Elterngespräche.</li>
 </ul>
 <p>Der Betreiber hat technisch Zugriff auf die Server, soweit es für Betrieb, Wartung und Fehlersuche nötig ist. Er wertet Unterrichts- und Lerndaten nicht aus. Für den Serverbetrieb (Hosting) setzt er technische Dienstleister als Unterauftragsverarbeiter ein, die nur nach seiner Weisung arbeiten: {{ $blank }} Ist die KI eingeschaltet, ist der KI-Anbieter (Abschnitt 5) ein weiterer Empfänger.</p>
 
@@ -58,6 +60,7 @@
 <h3>6. Wie lange werden die Daten gespeichert?</h3>
 <ul>
     <li>Unterrichtsstunden mit Abgaben und Gesprächen löscht die Plattform automatisch nach {{ $schoolYearsKept }} Schuljahren (das laufende eingerechnet).</li>
+    <li>Wiederholungskarten verschwinden mit der Unterrichtsstunde, zu der die Frage gehört, und mit dem Konto Ihres Kindes.</li>
     <li>Das Konto Ihres Kindes löscht die Schule, wenn es nicht mehr gebraucht wird, zum Beispiel beim Wechsel der Schule.</li>
     <li>Eine Sitzung endet nach {{ $sessionMinutes }} Minuten ohne Aktivität.</li>
     <li>Technische Protokolle des Servers (zum Beispiel mit der IP-Adresse) löscht der Betreiber nach {{ $blank }} Tagen.</li>

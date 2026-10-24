@@ -31,14 +31,6 @@ class ReviewSchedulerTest extends TestCase
 {
     use RefreshDatabase;
 
-    protected function setUp(): void
-    {
-        parent::setUp();
-
-        // Die aufgelöste Zeitzone gilt pro Prozess; jeder Test startet mit einer frischen Auflösung.
-        SchoolDay::flush();
-    }
-
     public function test_evaluation_creates_items_once(): void
     {
         $this->travelTo('2026-10-24 09:00:00');
