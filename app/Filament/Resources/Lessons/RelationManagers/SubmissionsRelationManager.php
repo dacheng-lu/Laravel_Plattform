@@ -3,10 +3,16 @@
 namespace App\Filament\Resources\Lessons\RelationManagers;
 
 use App\Filament\Resources\Lessons\Pages\EditLesson;
+use App\MistakeSource;
+use App\MistakeType;
+use App\Models\Answer;
 use App\Models\Lesson;
+use App\Models\Submission;
 use App\UnderstandingLevel;
+use Filament\Actions\Action;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\ViewAction;
+use Filament\Forms\Components\Select;
 use Filament\Infolists\Components\RepeatableEntry;
 use Filament\Infolists\Components\TextEntry;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -16,10 +22,13 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Str;
 use Livewire\Attributes\On;
 
 /**
- * The students' homework as handed in. Teachers only read it; returning a submission deletes it so the student can redo it.
+ * The students' homework as handed in. Teachers read it and may re-classify the mistake type of an answer; returning a
+ * submission deletes it so the student can redo it.
  */
 #[On(EditLesson::HOMEWORK_CHANGED_EVENT)]
 class SubmissionsRelationManager extends RelationManager
@@ -75,6 +84,22 @@ class SubmissionsRelationManager extends RelationManager
                                 TextEntry::make('feedback')
                                     ->label('Rückmeldung')
                                     ->placeholder('–'),
+                                TextEntry::make('mistake_type')
+                                    ->label('Fehlerart')
+                                    ->badge()
+                                    ->formatStateUsing(fn (mixed $state): string => match (true) {
+                                        $state instanceof MistakeType => $state->getLabel(),
+                                        is_string($state) => MistakeType::tryFrom($state)?->getLabel() ?? '',
+                                        default => '',
+                                    })
+                                    ->color(fn (?Answer $record): string => $record?->mistake_source === MistakeSource::Teacher ? 'success' : 'warning')
+                                    ->placeholder('Nicht eingeordnet')
+                                    // Never an assessment: an AI hint is marked as such, the teacher's own order stays visible.
+                                    ->helperText(fn (?Answer $record): ?string => match (true) {
+                                        $record?->mistake_type === null => null,
+                                        $record->mistake_source === MistakeSource::Teacher => 'Von der Lehrkraft eingeordnet',
+                                        default => 'KI-Hinweis, kann falsch sein',
+                                    }),
                             ]),
                     ]),
             ]);
@@ -101,6 +126,57 @@ class SubmissionsRelationManager extends RelationManager
             ->recordActions([
                 ViewAction::make()
                     ->label('Ansehen'),
+                Action::make('correctMistakes')
+                    ->label('Fehlerart korrigieren')
+                    ->icon(Heroicon::OutlinedPencilSquare)
+                    ->modalHeading('Fehlerart korrigieren')
+                    ->modalDescription('Deine Einordnung ersetzt den KI-Hinweis. Sie ändert weder die Bewertung noch eine Note.')
+                    ->modalSubmitActionLabel('Fehlerarten speichern')
+                    ->fillForm(fn (Submission $record): array => [
+                        'mistakes' => $record->answers
+                            ->mapWithKeys(fn (Answer $answer): array => [$answer->getKey() => $answer->mistake_type?->value ?? ''])
+                            ->all(),
+                    ])
+                    ->schema(fn (Submission $record): array => $record->answers
+                        ->map(fn (Answer $answer): Select => Select::make("mistakes.{$answer->getKey()}")
+                            ->label(Str::limit($answer->question->prompt, 80))
+                            ->options(self::mistakeTypeOptions())
+                            ->native(false))
+                        ->values()
+                        ->all())
+                    ->action(function (Submission $record, array $data): void {
+                        /** @var array<int|string, mixed> $submitted */
+                        $submitted = $data['mistakes'] ?? [];
+
+                        foreach ($record->answers as $answer) {
+                            // Per answer, so a teacher can only re-classify what they may see: another school never.
+                            Gate::authorize('correctMistake', $answer);
+
+                            // Only the answers of this submission count: an id smuggled in from somewhere else is ignored.
+                            if (! array_key_exists($answer->getKey(), $submitted)) {
+                                continue;
+                            }
+
+                            $type = $submitted[$answer->getKey()];
+                            $mistakeType = match (true) {
+                                $type instanceof MistakeType => $type,
+                                is_string($type) => MistakeType::tryFrom($type),
+                                default => null,
+                            };
+
+                            if ($mistakeType === $answer->mistake_type) {
+                                continue;
+                            }
+
+                            // The teacher's order wins; confidence belongs to an AI source and the score stays untouched.
+                            $answer->update([
+                                'mistake_type' => $mistakeType,
+                                'mistake_confidence' => null,
+                                'mistake_source' => MistakeSource::Teacher,
+                            ]);
+                        }
+                    })
+                    ->successNotificationTitle('Fehlerarten gespeichert'),
                 DeleteAction::make()
                     ->label('Zur Überarbeitung zurückgeben')
                     ->icon(Heroicon::OutlinedArrowUturnLeft)
@@ -109,6 +185,22 @@ class SubmissionsRelationManager extends RelationManager
                     ->modalSubmitActionLabel('Zurückgeben')
                     ->successNotificationTitle('Abgabe zurückgegeben'),
             ]);
+    }
+
+    /**
+     * The choices of the correction form: every mistake type plus "no type at all", so a teacher can withdraw one.
+     *
+     * @return array<string, string>
+     */
+    private static function mistakeTypeOptions(): array
+    {
+        $options = ['' => 'Keine Fehlerart'];
+
+        foreach (MistakeType::cases() as $type) {
+            $options[$type->value] = $type->getLabel();
+        }
+
+        return $options;
     }
 
     /**

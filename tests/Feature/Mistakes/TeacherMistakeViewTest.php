@@ -1,0 +1,125 @@
+<?php
+
+namespace Tests\Feature\Mistakes;
+
+use App\Filament\Pages\LearningProgress;
+use App\MistakeSource;
+use App\MistakeType;
+use App\Models\Answer;
+use App\Models\Competency;
+use App\Models\Question;
+use App\Models\SchoolClass;
+use App\Models\Submission;
+use App\Models\User;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Livewire\Livewire;
+use Tests\Feature\StudentProgress\CreatesLearningResults;
+use Tests\TestCase;
+
+/**
+ * "Lernstand & Förderbedarf" shows a teacher the mistake types of the students they may see anyway (spec AC-8),
+ * per competency and marked as an AI hint. Cross-school and without a visible class there is nothing to see.
+ */
+class TeacherMistakeViewTest extends TestCase
+{
+    use CreatesLearningResults;
+    use RefreshDatabase;
+
+    private SchoolClass $schoolClass;
+
+    private User $teacher;
+
+    private User $mia;
+
+    private User $ben;
+
+    private User $lena;
+
+    private Competency $fractions;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->schoolClass = SchoolClass::factory()->create(['name' => '7b']);
+        $this->teacher = $this->schoolClass->teacher;
+        $this->mia = User::factory()->student($this->schoolClass)->create(['name' => 'Mia Hoffmann']);
+        $this->ben = User::factory()->student($this->schoolClass)->create(['name' => 'Ben Schulz']);
+        $this->lena = User::factory()->student($this->schoolClass)->create(['name' => 'Lena Wagner']);
+
+        $this->fractions = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Brüche kürzen']);
+        $sentences = Competency::factory()->create(['subject' => 'Deutsch', 'name' => 'Satzbau']);
+
+        $miaHomework = $this->evaluatedHomework($this->mia, 'Brüche kürzen üben', '2026-10-01');
+        $this->answerWithMistake($miaHomework, $this->fractions, 30, MistakeType::Procedure);
+        $this->answerWithMistake($miaHomework, $this->fractions, 25, MistakeType::Procedure);
+        // A strength in another competency: it is no Förderbedarf and therefore gets no mistake line.
+        $this->answerWithMistake($miaHomework, $sentences, 90, MistakeType::Concept);
+
+        $benHomework = $this->evaluatedHomework($this->ben, 'Zähler und Nenner', '2026-10-05');
+        $this->answerWithMistake($benHomework, $this->fractions, 30, MistakeType::Procedure);
+        $this->answerWithMistake($benHomework, $this->fractions, 40, MistakeType::Concept);
+
+        $this->answerWithMistake($this->evaluatedHomework($this->lena, 'Kürzen am Modell', '2026-10-10'), $this->fractions, 35, MistakeType::Concept);
+    }
+
+    public function test_distribution_per_competency(): void
+    {
+        $page = Livewire::actingAs($this->teacher)->test(LearningProgress::class);
+
+        $page->assertOk()
+            ->assertSee('Brüche kürzen')
+            // Mia and Ben made the procedure mistake, Ben and Lena did not get the idea.
+            ->assertSee('3× Weg/Schritt falsch')
+            ->assertSee('2× Grundidee noch unklar')
+            // Never an assessment: the teacher sees that the counts come from a model.
+            ->assertSee('KI-Hinweis, kann falsch sein')
+            // The competency the students are strong in stays out of the Förderbedarf part.
+            ->assertDontSee('1× Grundidee noch unklar');
+    }
+
+    public function test_cross_school_sees_nothing(): void
+    {
+        // Positivkontrolle: the class teacher sees the distribution (see test_distribution_per_competency).
+        Livewire::actingAs($this->teacher)
+            ->test(LearningProgress::class)
+            ->assertSee('3× Weg/Schritt falsch');
+
+        // A teacher of another school has no visible class at all.
+        $foreignTeacher = User::factory()->teacher()->create();
+
+        Livewire::actingAs($foreignTeacher)
+            ->test(LearningProgress::class)
+            ->assertOk()
+            ->assertDontSee('3× Weg/Schritt falsch')
+            ->assertDontSee('Mia Hoffmann');
+
+        // With a class of their own they still never reach into this school's data.
+        $ownClass = SchoolClass::factory()->for($foreignTeacher, 'teacher')->create(['name' => '5a']);
+
+        Livewire::actingAs($foreignTeacher)
+            ->test(LearningProgress::class)
+            ->assertSet('schoolClassId', $ownClass->id)
+            ->assertDontSee('3× Weg/Schritt falsch')
+            ->set('schoolClassId', $this->schoolClass->id)
+            ->assertForbidden();
+
+        // An admin of another school sees only the classes of their own school.
+        Livewire::actingAs(User::factory()->admin()->create())
+            ->test(LearningProgress::class)
+            ->assertOk()
+            ->assertDontSee('3× Weg/Schritt falsch');
+    }
+
+    /**
+     * An answer with a classified mistake, next to the answers the class already has.
+     */
+    private function answerWithMistake(Submission $submission, Competency $competency, int $score, MistakeType $type, MistakeSource $source = MistakeSource::Demo): Answer
+    {
+        return Answer::factory()
+            ->for($submission)
+            ->for(Question::factory()->for($submission->lesson)->create(['competency_id' => $competency->id]))
+            ->mistake($type, $source)
+            ->create(['score' => $score]);
+    }
+}
