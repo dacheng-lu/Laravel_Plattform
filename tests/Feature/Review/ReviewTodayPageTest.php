@@ -72,7 +72,7 @@ class ReviewTodayPageTest extends TestCase
     public function test_solution_hidden_until_reveal(): void
     {
         $student = $this->student();
-        $this->dueItem($student, today()->toDateString(), 'Was macht die Photosynthese mit dem Licht?');
+        $item = $this->dueItem($student, today()->toDateString(), 'Was macht die Photosynthese mit dem Licht?');
 
         $page = Livewire::actingAs($student)->test(ReviewToday::class);
 
@@ -84,8 +84,16 @@ class ReviewTodayPageTest extends TestCase
 
         // Neither the markup nor the JSON Livewire keeps for the next request carries the solution.
         $html = $page->html();
-        $this->assertStringContainsString('wire:snapshot', $html);
-        $this->assertStringNotContainsString(self::SOLUTION, $this->snapshotJson($html));
+        $snapshot = $this->snapshotJson($html);
+
+        // Positive control first: the snapshot is not an empty string but carries the open card, and the very same
+        // markup does show the question. Without this a "not in there" could come from a check of nothing at all.
+        $state = json_decode($snapshot, true, flags: JSON_THROW_ON_ERROR);
+        $this->assertSame($item->getKey(), $state['data']['itemId'] ?? null);
+        $this->assertStringContainsString('Was macht die Photosynthese mit dem Licht?', $html);
+
+        $this->assertStringNotContainsString(self::SOLUTION, $html);
+        $this->assertStringNotContainsString(self::SOLUTION, $snapshot);
 
         $page->call('reveal')
             ->assertSet('revealed', true)
@@ -232,8 +240,19 @@ class ReviewTodayPageTest extends TestCase
             ->assertDontSee('Frage aus einer nie zugewiesenen Stunde')
             ->assertDontSee('Frage aus einer unveröffentlichten Stunde');
 
-        // A move into another school hides the questions of the old school. A class change inside the same school
-        // keeps the student's own questions: they come from their own evaluated answers (see ReviewQueue).
+        // A class change inside the same school keeps the student's own question: it comes from their own evaluated
+        // answer, and that homework was delegated to them. Decision of the orchestrator: own, answered questions stay.
+        $sameSchoolClass = SchoolClass::factory()->for($ownClass->school)->create();
+        $student->update(['school_class_id' => $sameSchoolClass->getKey(), 'school_id' => $sameSchoolClass->school_id]);
+        $student->refresh();
+
+        $this->assertSame([$own->getKey()], ReviewQueue::dueToday($student)->pluck('id')->all());
+
+        Livewire::actingAs($student)->test(ReviewToday::class)
+            ->assertSet('itemId', $own->getKey())
+            ->assertSee('Eigene Frage zu den Zellorganellen');
+
+        // A move into another school hides the questions of the old school.
         $newClass = SchoolClass::factory()->create();
         $student->update(['school_class_id' => $newClass->getKey(), 'school_id' => $newClass->school_id]);
 

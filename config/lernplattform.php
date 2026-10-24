@@ -4,6 +4,21 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | School time zone
+    |--------------------------------------------------------------------------
+    |
+    | The calendar day the platform works with: "today" and "tomorrow" are the days in this time zone, not in UTC.
+    | The server runs in UTC, so between 00:00 and 02:00 CEST the UTC day is still the previous one – a due date
+    | worked out in UTC would then call "tomorrow" today. Everything that turns a day into a date (for example the
+    | "Heute wiederholen" due dates) goes through App\Support\SchoolDay, which reads this value and falls back to
+    | Europe/Berlin when it is not a known time zone identifier.
+    |
+    */
+
+    'timezone' => env('LERNPLATTFORM_TIMEZONE', 'Europe/Berlin'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Retention of learning data
     |--------------------------------------------------------------------------
     |

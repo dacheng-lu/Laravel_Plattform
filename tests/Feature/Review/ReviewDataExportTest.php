@@ -65,9 +65,13 @@ class ReviewDataExportTest extends TestCase
         // The export ran and holds the student's account data …
         $this->assertSame($student->name, $export['konto']['name']);
 
+        // … and the hand-in of a lesson of this administration's own school: SubmissionPolicy allows an admin to
+        // read it (view → LessonPolicy::update). So the answers are in there – with their mistake type.
+        $this->assertCount(1, $export['abgaben']);
+        $this->assertSame('Er steuert die Zelle.', $export['abgaben'][0]['antworten'][0]['antwort']);
+        $this->assertSame('Weg/Schritt falsch', $export['abgaben'][0]['antworten'][0]['fehlerart']);
+
         // … but never the self-assessments: no key, and none of the counter names anywhere in the export.
-        // The hand-in is not part of this export either: a school administration may not read a student's
-        // submission (SubmissionPolicy), so PersonalDataExport leaves the answers out as well.
         $this->assertArrayNotHasKey('wiederholen', $export);
         $json = json_encode($export, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
 
@@ -97,7 +101,8 @@ class ReviewDataExportTest extends TestCase
     private function evaluatedHandIn(): array
     {
         $student = User::factory()->student()->create();
-        $lesson = Lesson::factory()->publishedFor([$student])->create([
+        // In the student's own class, so the lesson belongs to the student's school – as a real homework would.
+        $lesson = Lesson::factory()->for($student->schoolClass)->publishedFor([$student])->create([
             'subject' => 'Biologie',
             'topic' => 'Zellen',
             'held_on' => '2026-09-10',

@@ -16,11 +16,14 @@ class ReviewQueue
 {
     /**
      * How many questions the student may still repeat today: the daily limit minus what they have already rated today.
+     *
+     * "Today" is the school day, so a rating at 00:30 CEST counts for the day that has just begun, not for the UTC
+     * day that is still running.
      */
     public static function remainingToday(User $student): int
     {
         $ratedToday = $student->reviewItems()
-            ->where('last_reviewed_at', '>=', today()->startOfDay())
+            ->where('last_reviewed_at', '>=', SchoolDay::startUtc())
             ->count();
 
         return max(0, (int) config('lernplattform.review.daily_limit') - $ratedToday);
@@ -79,11 +82,12 @@ class ReviewQueue
         return ReviewItem::query()
             ->where('student_id', $student->getKey())
             ->where('box', '<', (int) config('lernplattform.review.final_box'))
-            ->whereDate('due_on', '<=', today())
+            // A school day, not the UTC day: at 00:30 CEST the questions of the new day are due.
+            ->whereDate('due_on', '<=', SchoolDay::today())
             // An item rated today waits for its next interval, even while its due date still says today.
             ->where(fn (Builder $query): Builder => $query
                 ->whereNull('last_reviewed_at')
-                ->orWhere('last_reviewed_at', '<', today()->startOfDay()))
+                ->orWhere('last_reviewed_at', '<', SchoolDay::startUtc()))
             // The school check keeps a school change from surfacing questions of the old school. There is deliberately
             // no class filter: items only come from the student's own evaluated answers, so after a class change inside
             // the same school their own questions stay visible – that homework was delegated to them.

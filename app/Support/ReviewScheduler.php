@@ -14,6 +14,8 @@ use RuntimeException;
  * student's self-assessment. Intervals and the daily limit come from `lernplattform.review`.
  *
  * Not final, so tests can replace it with a mock.
+ * Due dates are school days (App\Support\SchoolDay), never the UTC day the server runs in, and a card is rated at
+ * most once per school day.
  * A broken setting never creates or moves an item: the call reports the problem once and does nothing (fail closed).
  * Nothing here ever writes to answers or submissions – self-assessments are practice only.
  */
@@ -44,7 +46,7 @@ class ReviewScheduler
             return 0;
         }
 
-        $dueOn = today()->addDays($settings['intervals'][1]);
+        $dueOn = SchoolDay::today()->addDays($settings['intervals'][1]);
         $created = 0;
 
         foreach ($submission->answers()->with('question')->get() as $answer) {
@@ -71,6 +73,9 @@ class ReviewScheduler
     /**
      * Moves the item one box on ("knew"), resets its interval in the same box ("hard") or sends it back to box 1
      * ("forgot") and counts the rating.
+     *
+     * A card that was already rated on this school day is not rated again: a double click or a second tab would
+     * otherwise move it twice and shorten every following interval.
      */
     public function rate(ReviewItem $item, ReviewRating $rating): ReviewItem
     {
@@ -92,6 +97,12 @@ class ReviewScheduler
                 return $locked;
             }
 
+            // One rating per card and school day: the second click of a double click, or the second tab, arrives
+            // with the state from before the first one and must not count again.
+            if (self::ratedOnThisSchoolDay($locked)) {
+                return $locked;
+            }
+
             $box = match ($rating) {
                 ReviewRating::Knew => min($locked->box + 1, $finalBox),
                 ReviewRating::Hard => $locked->box,
@@ -103,7 +114,7 @@ class ReviewScheduler
             $dueOn = $locked->due_on;
 
             if ($box < $finalBox) {
-                $dueOn = today()->addDays($settings['intervals'][$box]);
+                $dueOn = SchoolDay::today()->addDays($settings['intervals'][$box]);
             }
 
             $locked->update([
@@ -117,6 +128,14 @@ class ReviewScheduler
 
             return $locked;
         });
+    }
+
+    /**
+     * Whether the card was already rated on the current school day, so that a second click does not count.
+     */
+    private static function ratedOnThisSchoolDay(ReviewItem $item): bool
+    {
+        return $item->last_reviewed_at !== null && $item->last_reviewed_at >= SchoolDay::startUtc();
     }
 
     /**

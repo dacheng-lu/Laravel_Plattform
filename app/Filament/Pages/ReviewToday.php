@@ -7,6 +7,7 @@ use App\Models\User;
 use App\ReviewRating;
 use App\Support\ReviewQueue;
 use App\Support\ReviewScheduler;
+use App\Support\SchoolDay;
 use BackedEnum;
 use Filament\Facades\Filament;
 use Filament\Pages\Page;
@@ -42,7 +43,10 @@ class ReviewToday extends Page
     /** The sample solution is only part of the response once the student asked for it. */
     public bool $revealed = false;
 
-    /** Only for the student's own eyes on this page: never stored, never sent anywhere, and capped below. */
+    /**
+     * What the student typed: wird nie gespeichert; bleibt nur im Browser der Schülerin (Livewire-Zustand).
+     * It is capped below and shown back to her on this page, never written to the database and never rated by anyone.
+     */
     public string $ownAnswer = '';
 
     public static function canAccess(): bool
@@ -77,16 +81,29 @@ class ReviewToday extends Page
 
     /**
      * Takes the self-assessment, lets the scheduler move the item on and shows the next question.
+     *
+     * A card that was already rated on this school day is not rated a second time: the second click of a double
+     * click, or a second tab, arrives with the state from before the first click, and that is no error for the
+     * student – the page simply shows what is still due.
      */
     public function rate(string $rating): void
     {
-        $item = $this->currentItem();
         $reviewRating = ReviewRating::tryFrom($rating);
 
         // Self-assessing needs the solution on screen and one of the three ratings.
         if (! $this->revealed || $reviewRating === null) {
             abort(422);
         }
+
+        if ($this->ratedOnThisSchoolDay()) {
+            $this->ownAnswer = '';
+            $this->revealed = false;
+            $this->itemId = ReviewQueue::dueToday($this->student())->first()?->getKey();
+
+            return;
+        }
+
+        $item = $this->currentItem();
 
         app(ReviewScheduler::class)->rate($item, $reviewRating);
 
@@ -144,6 +161,27 @@ class ReviewToday extends Page
         Gate::authorize('update', $item);
 
         return $item;
+    }
+
+    /**
+     * Whether the card on screen is one of the student's own cards that was already rated on this school day.
+     *
+     * Only the student's own items count, so a foreign or stale id in the browser still ends in the 403 of
+     * `currentItem()` instead of being waved through.
+     */
+    private function ratedOnThisSchoolDay(): bool
+    {
+        if ($this->itemId === null) {
+            return false;
+        }
+
+        $item = $this->student()->reviewItems()->whereKey($this->itemId)->first();
+
+        if ($item === null || $item->last_reviewed_at === null) {
+            return false;
+        }
+
+        return $item->last_reviewed_at >= SchoolDay::startUtc();
     }
 
     private function student(): User

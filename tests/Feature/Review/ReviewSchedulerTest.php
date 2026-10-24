@@ -13,6 +13,7 @@ use App\Models\User;
 use App\QuestionType;
 use App\ReviewRating;
 use App\Support\ReviewScheduler;
+use App\Support\SchoolDay;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
@@ -134,7 +135,7 @@ class ReviewSchedulerTest extends TestCase
         ]);
     }
 
-    public function test_a_settled_box_is_never_due_again(): void
+    public function test_a_settled_item_is_not_changed_by_further_ratings(): void
     {
         $this->travelTo('2026-10-24 08:00:00');
 
@@ -165,6 +166,54 @@ class ReviewSchedulerTest extends TestCase
         $this->assertSame(0, $again->hard_count);
         $this->assertSame(0, $again->forgot_count);
         $this->assertSame($ratedAt, $again->last_reviewed_at?->toDateTimeString());
+    }
+
+    public function test_due_dates_follow_the_school_day_not_the_utc_day(): void
+    {
+        $this->travelTo('2026-10-24 10:00:00 UTC');
+
+        // Positivkontrolle: mittags sind UTC-Tag und Schultag derselbe, „morgen“ ist der 25.
+        $daytime = $this->evaluatedSubmissionWithTwoQuestions();
+        $this->assertSame(2, app(ReviewScheduler::class)->scheduleForSubmission($daytime));
+        $this->assertSame(['2026-10-25', '2026-10-25'], $this->dueDatesOf($daytime));
+
+        // 22:30 UTC ist 00:30 MESZ am 25.: der Schultag ist der 25., „morgen“ also der 26. – in UTC wäre es der 25.
+        $this->travelTo('2026-10-24 22:30:00 UTC');
+        $this->assertSame('2026-10-25', SchoolDay::today()->toDateString());
+
+        $late = $this->evaluatedSubmissionWithTwoQuestions();
+        $this->assertSame(2, app(ReviewScheduler::class)->scheduleForSubmission($late));
+        $this->assertSame(['2026-10-26', '2026-10-26'], $this->dueDatesOf($late));
+    }
+
+    public function test_a_rating_after_midnight_counts_for_the_new_school_day(): void
+    {
+        $this->travelTo('2026-10-24 22:30:00 UTC');
+
+        $item = ReviewItem::factory()->box(3)->due('2026-10-25')->create();
+
+        $rated = app(ReviewScheduler::class)->rate($item, ReviewRating::Forgot)->refresh();
+
+        $this->assertSame(1, $rated->box);
+        // Box 1 ist am nächsten Schultag wieder dran: der 26., nicht der 25.
+        $this->assertSame('2026-10-26', $rated->due_on->toDateString());
+        $this->assertSame(now()->toDateTimeString(), $rated->last_reviewed_at?->toDateTimeString());
+    }
+
+    public function test_an_unusable_school_time_zone_falls_back_to_berlin(): void
+    {
+        $this->travelTo('2026-10-24 22:30:00 UTC');
+
+        config()->set('lernplattform.timezone', 'Nicht/Gueltig');
+
+        // Statt einer geratenen Zeitzone gilt Europe/Berlin: Schultag ist der 25., Tagesbeginn 22:00 UTC am 24.
+        $this->assertSame('2026-10-25', SchoolDay::today()->toDateString());
+        $this->assertSame('2026-10-24 22:00:00', SchoolDay::startUtc()->toDateTimeString());
+
+        // Positivkontrolle: der übliche Weg kommt mit dem Ersatz zu demselben Fälligkeitsdatum wie mit gültiger Zone.
+        $submission = $this->evaluatedSubmissionWithTwoQuestions();
+        $this->assertSame(2, app(ReviewScheduler::class)->scheduleForSubmission($submission));
+        $this->assertSame(['2026-10-26', '2026-10-26'], $this->dueDatesOf($submission));
     }
 
     public function test_disabled_or_unevaluated_creates_nothing(): void
@@ -326,7 +375,10 @@ class ReviewSchedulerTest extends TestCase
 
         $scheduler = app(ReviewScheduler::class);
 
-        foreach (ReviewRating::cases() as $rating) {
+        // One rating per card and school day (a double click must not count twice), so each rating gets its own day.
+        foreach (ReviewRating::cases() as $day => $rating) {
+            $this->travelTo(sprintf('2026-10-%02d 08:00:00', 24 + $day));
+
             $scheduler->rate($item, $rating);
 
             $this->assertSame(45, $answer->refresh()->score, $rating->value);
@@ -342,6 +394,22 @@ class ReviewSchedulerTest extends TestCase
         $this->assertSame(1, $item->hard_count);
         $this->assertSame(1, $item->forgot_count);
         $this->assertSame(1, ReviewItem::query()->count());
+    }
+
+    /**
+     * The due dates of the items of one hand-in's student, oldest question first.
+     *
+     * @return list<string>
+     */
+    private function dueDatesOf(Submission $submission): array
+    {
+        return ReviewItem::query()
+            ->where('student_id', $submission->student_id)
+            ->orderBy('question_id')
+            ->get()
+            ->map(fn (ReviewItem $item): string => $item->due_on->toDateString())
+            ->values()
+            ->all();
     }
 
     private function question(Lesson $lesson, QuestionType $type, int $position): Question
