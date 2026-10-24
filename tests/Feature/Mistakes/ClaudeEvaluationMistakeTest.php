@@ -54,23 +54,39 @@ class ClaudeEvaluationMistakeTest extends TestCase
         $this->assertSame(55, $evaluation['answers'][$question->id]['score']);
         $this->assertSame('procedure', $evaluation['answers'][$question->id]['mistake_type']);
 
-        Http::assertSent(function (Request $request) use ($student): bool {
+        Http::assertSent(function (Request $request) use ($student, $question): bool {
             $raw = $request->body();
             $body = (string) json_encode($request->data(), JSON_UNESCAPED_UNICODE);
 
-            // Fehlerpfad: neither the name nor any other identifier of the student leaves the platform.
-            $this->assertStringNotContainsString('Zacharias', $raw);
-            $this->assertStringNotContainsString('Quellenberg', $raw);
+            // Fehlerpfad: neither the names nor any other identifier of the students reach the API – not from the
+            // answer, not from the summary and not from the teacher's notes.
+            foreach (['Zacharias', 'Quellenberg', 'Mia', 'Klarheit', 'Hannelore', 'Trautmann'] as $namePart) {
+                $this->assertDoesNotMatchRegularExpression('/\b'.$namePart.'\b/u', $body);
+            }
             $this->assertStringNotContainsStringIgnoringCase('zquellenberg', $raw);
             $this->assertStringNotContainsString($student->email, $raw);
-            $this->assertStringNotContainsString('Schüler:in '.$student->id, $body);
             $this->assertStringNotContainsString('student_id', $body);
+            $this->assertStringNotContainsString('Schüler-ID', $body);
 
-            // Positivkontrolle: the rest of the texts arrives, and the name became the neutral label.
-            $this->assertSame(2, substr_count($body, 'Schüler:in A'));
+            // The id itself must not appear as a number either. The ids of this fixture are small and deterministic, so
+            // the only numbers allowed in the body are the ones the texts and the schema bring with them.
+            $this->assertNotContains(
+                $student->id,
+                [$question->id, 0, 5, 10, 21, 80, 100, 2026, 16000],
+                'Fixture: Die Schüler-ID muss von allen Zahlen im Request verschieden sein.',
+            );
+            $this->assertDoesNotMatchRegularExpression('/\b'.$student->id.'\b/', $body);
+
+            // Positivkontrolle: the texts arrive, the names became neutral labels, and the question id is still labelled.
+            $this->assertSame(3, substr_count($body, 'Schüler:in A'));
+            $this->assertStringContainsString('Schüler:in A hat die Bläschen gezählt', $body);
+            $this->assertStringContainsString('Schüler:in B hat sie notiert', $body);
+            $this->assertStringContainsString('Wasserpest unter der Lampe', $body);
+            $this->assertStringContainsString('Sauerstoffbläschen', $body);
             $this->assertStringContainsString('hat gesehen, dass Pflanzen Licht brauchen', $body);
             $this->assertStringContainsString('Licht und Wasser reichen schon', $body);
             $this->assertStringContainsString('Was braucht die Pflanze für die Fotosynthese?', $body);
+            $this->assertMatchesRegularExpression('/\b'.$question->id.'\b/', $body);
 
             return true;
         });
@@ -168,8 +184,57 @@ class ClaudeEvaluationMistakeTest extends TestCase
         Http::assertSentCount(3);
     }
 
+    public function test_threshold_gates_the_mistake_type(): void
+    {
+        [$submission, $question] = $this->submissionNamingTheStudent();
+
+        Http::fake(['api.anthropic.com/*' => Http::sequence()
+            ->push($this->messageBody([
+                'understanding_score' => 90,
+                'feedback' => 'Stark!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 85, 'feedback' => 'Sehr gut.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
+                ],
+            ]))
+            ->push($this->messageBody([
+                'understanding_score' => 55,
+                'feedback' => 'Guter Anfang!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 50, 'feedback' => 'Ein Schritt fehlt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
+                ],
+            ]))
+            ->push($this->messageBody([
+                'understanding_score' => 82,
+                'feedback' => 'Gut gemacht!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 80, 'feedback' => 'Passt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
+                ],
+            ]))]);
+
+        $assistant = app(ClaudeLessonAssistant::class);
+
+        // Fehlerpfad: above the threshold the server drops the type, even though the AI returned one.
+        $aboveThreshold = $assistant->evaluateSubmission($submission);
+        $this->assertSame([$question->id => ['score' => 85, 'feedback' => 'Sehr gut.']], $aboveThreshold['answers']);
+        $this->assertArrayNotHasKey('mistake_type', $aboveThreshold['answers'][$question->id]);
+
+        // Grenzfall: score == threshold counts as good enough for no mistake type.
+        $atThreshold = $assistant->evaluateSubmission($submission);
+        $this->assertSame([$question->id => ['score' => 80, 'feedback' => 'Passt.']], $atThreshold['answers']);
+
+        // Positivkontrolle: below the threshold the same classification is kept.
+        $belowThreshold = $assistant->evaluateSubmission($submission);
+        $this->assertEquals([$question->id => ['score' => 50, 'feedback' => 'Ein Schritt fehlt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90]], $belowThreshold['answers']);
+        $this->assertSame('procedure', $belowThreshold['answers'][$question->id]['mistake_type']);
+
+        Http::assertSentCount(3);
+    }
+
     /**
-     * A submission whose summary and answer both name the student of the lesson's class.
+     * A submission whose summary, answer and the lesson notes name students of the lesson's class.
      *
      * @return array{0: Submission, 1: Question, 2: User}
      */
@@ -179,7 +244,7 @@ class ClaudeEvaluationMistakeTest extends TestCase
             'subject' => 'Biologie',
             'topic' => 'Fotosynthese',
             'held_on' => '2026-10-21',
-            'notes' => 'Wasserpest unter der Lampe: Sauerstoffbläschen gezählt.',
+            'notes' => 'Wasserpest unter der Lampe: Sauerstoffbläschen gezählt. Zacharias Quellenberg hat die Bläschen gezählt, Mia Klarheit hat sie notiert.',
         ]);
         $teacher = User::factory()->teacher()->create([
             'name' => 'Hannelore Trautmann',
@@ -192,6 +257,9 @@ class ClaudeEvaluationMistakeTest extends TestCase
             'username' => 'zquellenberg',
             'email' => 'zacharias.quellenberg@example.org',
         ]);
+        // A classmate who is only mentioned in the notes: no submission, no account activity of their own.
+        User::factory()->student($lesson->schoolClass)->create(['name' => 'Mia Klarheit']);
+
         $question = Question::factory()->for($lesson)->create([
             'type' => QuestionType::Comprehension,
             'prompt' => 'Was braucht die Pflanze für die Fotosynthese?',

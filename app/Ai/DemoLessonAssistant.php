@@ -161,15 +161,17 @@ class DemoLessonAssistant implements LessonAssistant
         }
 
         // The group's most common mistake type decides the order and the wording; without one the draft stays as it is.
-        $questions = match ($mistakeType) {
-            MistakeType::Procedure => $this->applicationFirst($questions),
-            MistakeType::Concept => $this->explanationFirst($questions, $description === '' ? ($sentences[0] ?? "Schau dir die Stunde „{$topic}“ noch einmal an.") : $this->sentenceEnd($description)),
-            MistakeType::Incomplete => array_map(fn (array $question): array => [
+        if ($mistakeType === MistakeType::Procedure) {
+            $questions = $this->applicationFirst($questions, "Schritt für Schritt: Finde ein eigenes Beispiel aus deinem Alltag, bei dem „{$term(1)}“ eine Rolle spielt, und beschreibe deinen Weg in einzelnen Schritten. Damit übst du „{$competency->name}“.");
+        } elseif ($mistakeType === MistakeType::Concept) {
+            $explanation = $description !== '' ? $this->sentenceEnd($description) : ($sentences[0] ?? "Schau dir die Stunde „{$topic}“ noch einmal an.");
+            $questions = $this->explanationFirst($questions, "Lies zuerst die kurze Erklärung: {$explanation} Erkläre danach mit eigenen Worten, was man unter „{$term(0)}“ versteht.");
+        } elseif ($mistakeType === MistakeType::Incomplete) {
+            $questions = array_map(fn (array $question): array => [
                 ...$question,
-                'prompt' => 'Ergänze: '.$question['prompt'].' Formuliere den fehlenden Teil mit dem Satzanfang „… weil …“.',
-            ], $questions),
-            default => $questions,
-        };
+                'prompt' => 'Ergänze den fehlenden Teil: '.$this->unlabelled($question['prompt']).' Formuliere deinen fehlenden Satzteil mit dem Satzanfang „… weil …“.',
+            ], $questions);
+        }
 
         $focus = $terms === [] ? '' : ' Im Mittelpunkt stehen '.$this->quotedList(array_column(array_slice($terms, 0, 3), 'term')).'.';
         $recap = $sentences === [] ? '' : ' '.$this->expectedAnswer($sentences, array_slice($terms, 0, 2));
@@ -181,12 +183,12 @@ class DemoLessonAssistant implements LessonAssistant
     }
 
     /**
-     * The application question first, worded as a worked path: the group got stuck on a step, not on the idea.
+     * The application question first, with a prompt of its own: the group got stuck on a step, not on the idea.
      *
      * @param  list<array<string, mixed>>  $questions
      * @return list<array<string, mixed>>
      */
-    private function applicationFirst(array $questions): array
+    private function applicationFirst(array $questions, string $prompt): array
     {
         foreach ($questions as $index => $question) {
             if ($question['type'] !== QuestionType::Application) {
@@ -195,19 +197,19 @@ class DemoLessonAssistant implements LessonAssistant
 
             unset($questions[$index]);
 
-            return [[...$question, 'prompt' => 'Schritt für Schritt: '.$question['prompt']], ...array_values($questions)];
+            return [[...$question, 'prompt' => $prompt], ...array_values($questions)];
         }
 
         return $questions;
     }
 
     /**
-     * A short explanation of the idea before the first question builds on it.
+     * The first question becomes a comprehension question after a short explanation of the idea.
      *
      * @param  list<array<string, mixed>>  $questions
      * @return list<array<string, mixed>>
      */
-    private function explanationFirst(array $questions, string $explanation): array
+    private function explanationFirst(array $questions, string $prompt): array
     {
         if ($questions === []) {
             return $questions;
@@ -215,10 +217,18 @@ class DemoLessonAssistant implements LessonAssistant
 
         $first = $questions[0];
         $first['type'] = QuestionType::Comprehension;
-        $first['prompt'] = 'Lies zuerst die kurze Erklärung: '.trim($explanation).' '.$first['prompt'];
+        $first['prompt'] = $prompt;
         $questions[0] = $first;
 
         return $questions;
+    }
+
+    /**
+     * A question's wording without the heading the offline rules gave it, so a variant can set its own.
+     */
+    private function unlabelled(string $prompt): string
+    {
+        return (string) preg_replace('/^(?:Zum Aufwärmen|Jetzt wird es praktisch|Zum Knobeln):\s*/u', '', $prompt);
     }
 
     public function evaluateSubmission(Submission $submission): array

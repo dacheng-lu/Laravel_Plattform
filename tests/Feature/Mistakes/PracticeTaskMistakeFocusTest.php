@@ -55,14 +55,23 @@ class PracticeTaskMistakeFocusTest extends TestCase
         // Concept starts with the idea, Procedure with the application question.
         $this->assertSame(QuestionType::Comprehension, $concept['questions'][0]['type']);
         $this->assertStringStartsWith('Lies zuerst die kurze Erklärung: ', $concept['questions'][0]['prompt']);
+        $this->assertStringContainsString('Erkläre danach mit eigenen Worten', $concept['questions'][0]['prompt']);
+        $this->assertStringNotContainsString('Zum Aufwärmen:', $concept['questions'][0]['prompt']);
+
         $this->assertSame(QuestionType::Application, $procedure['questions'][0]['type']);
         $this->assertStringStartsWith('Schritt für Schritt: ', $procedure['questions'][0]['prompt']);
-        $this->assertStringContainsString('Jetzt wird es praktisch:', $procedure['questions'][0]['prompt']);
+        $this->assertStringContainsString('beschreibe deinen Weg in einzelnen Schritten', $procedure['questions'][0]['prompt']);
+        // No stacked headings and no repeated phrase: the offline heading "Jetzt wird es praktisch:" is gone.
+        $this->assertStringNotContainsString('Jetzt wird es praktisch:', $procedure['questions'][0]['prompt']);
+        $this->assertSame(1, substr_count($procedure['questions'][0]['prompt'], 'Schritt für Schritt'));
 
-        // Incomplete asks with a sentence frame instead of a free answer.
+        // Incomplete asks with a sentence frame instead of a free answer, again without the offline headings.
         foreach ($incomplete['questions'] as $question) {
-            $this->assertStringStartsWith('Ergänze: ', $question['prompt']);
-            $this->assertStringContainsString('… weil …', $question['prompt']);
+            $this->assertStringStartsWith('Ergänze den fehlenden Teil: ', $question['prompt']);
+            $this->assertStringContainsString('„… weil …“', $question['prompt']);
+            $this->assertStringNotContainsString('Zum Aufwärmen:', $question['prompt']);
+            $this->assertStringNotContainsString('Jetzt wird es praktisch:', $question['prompt']);
+            $this->assertStringNotContainsString('Zum Knobeln:', $question['prompt']);
         }
 
         // Every variant keeps the shape of a Förderaufgabe: at most four questions, exactly one application.
