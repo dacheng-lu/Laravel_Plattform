@@ -5,11 +5,13 @@ namespace App\Filament\Widgets;
 use App\Filament\Pages\ExplainIt;
 use App\Filament\Pages\MyHomework;
 use App\Filament\Pages\MyLearningProgress;
+use App\Filament\Pages\ReviewToday;
 use App\Filament\Pages\WorkOnHomework;
 use App\Models\Lesson;
 use App\Models\Submission;
 use App\Models\User;
 use App\Support\LearningInsights;
+use App\Support\ReviewQueue;
 use Carbon\CarbonInterface;
 use Filament\Support\Icons\Heroicon;
 use Filament\Widgets\Widget;
@@ -18,7 +20,8 @@ use Illuminate\Support\Collection;
 
 /**
  * The student's start page: greeting, what's due next, how well they understood their homework so far,
- * the latest feedback and the way into "Erklär's mir". Only the logged-in student's own data is read.
+ * the latest feedback and the way into "Erklär's mir" and "Heute wiederholen". Only the logged-in student's own
+ * data is read.
  */
 class StudentLearningWidget extends Widget
 {
@@ -87,6 +90,8 @@ class StudentLearningWidget extends Widget
             'latestFeedbackLevel' => $latestFeedback ? LearningInsights::studentLevel((int) $latestFeedback->understanding_score) : null,
             'homeworkUrl' => MyHomework::getUrl(),
             'explainItUrl' => ExplainIt::getUrl(),
+            'reviewDueCount' => ReviewQueue::dueCount($student),
+            'reviewUrl' => ReviewToday::getUrl(),
         ];
     }
 
