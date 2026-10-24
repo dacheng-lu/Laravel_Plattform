@@ -198,19 +198,19 @@ class ClaudeEvaluationMistakeTest extends TestCase
                 ],
             ]))
             ->push($this->messageBody([
-                'understanding_score' => 55,
-                'feedback' => 'Guter Anfang!',
-                'gaps' => [],
-                'answers' => [
-                    ['question_id' => $question->id, 'score' => 50, 'feedback' => 'Ein Schritt fehlt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
-                ],
-            ]))
-            ->push($this->messageBody([
                 'understanding_score' => 82,
                 'feedback' => 'Gut gemacht!',
                 'gaps' => [],
                 'answers' => [
                     ['question_id' => $question->id, 'score' => 80, 'feedback' => 'Passt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
+                ],
+            ]))
+            ->push($this->messageBody([
+                'understanding_score' => 55,
+                'feedback' => 'Guter Anfang!',
+                'gaps' => [],
+                'answers' => [
+                    ['question_id' => $question->id, 'score' => 50, 'feedback' => 'Ein Schritt fehlt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
                 ],
             ]))]);
 
