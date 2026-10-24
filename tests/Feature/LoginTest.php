@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Filament\Pages\Auth\Login;
 use App\Models\User;
+use Closure;
 use Database\Seeders\DatabaseSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -169,47 +170,44 @@ class LoginTest extends TestCase
 
     /**
      * The config file is required directly instead of refreshing the application, because a fresh
-     * boot lets LoadEnvironmentVariables rewrite DEMO_MODE from .env through Laravel's immutable
-     * env repository and would silently mask the value prepared by this test.
+     * boot lets LoadEnvironmentVariables rewrite the environment through Laravel's immutable env
+     * repository and would silently mask the values prepared by this test.
      */
     #[DataProvider('demoModeValues')]
     public function test_demo_mode_env_value_is_parsed_strictly(string $value, bool $expected): void
     {
-        $original = [
-            'env' => $_ENV['DEMO_MODE'] ?? null,
-            'server' => $_SERVER['DEMO_MODE'] ?? null,
-            'putenv' => getenv('DEMO_MODE'),
-        ];
-
-        $_ENV['DEMO_MODE'] = $value;
-        $_SERVER['DEMO_MODE'] = $value;
-        putenv("DEMO_MODE={$value}");
-
-        try {
+        $this->withEnvironment(['APP_ENV' => 'testing', 'DEMO_MODE' => $value], function () use ($expected): void {
             $config = require config_path('app.php');
 
             $this->assertSame($expected, $config['demo']['enabled']);
-        } finally {
-            if ($original['env'] === null) {
-                unset($_ENV['DEMO_MODE']);
-            } else {
-                $_ENV['DEMO_MODE'] = $original['env'];
-            }
+        });
+    }
 
-            if ($original['server'] === null) {
-                unset($_SERVER['DEMO_MODE']);
-            } else {
-                $_SERVER['DEMO_MODE'] = $original['server'];
-            }
+    public function test_demo_mode_is_always_disabled_in_production(): void
+    {
+        $this->withEnvironment(['APP_ENV' => 'production', 'DEMO_MODE' => 'true'], function (): void {
+            $config = require config_path('app.php');
 
-            $previousPutenv = $original['putenv'];
+            $this->assertFalse($config['demo']['enabled']);
+        });
+    }
 
-            if ($previousPutenv === false) {
-                putenv('DEMO_MODE');
-            } else {
-                putenv("DEMO_MODE={$previousPutenv}");
-            }
-        }
+    public function test_demo_mode_is_disabled_when_the_variable_is_not_set(): void
+    {
+        $this->withEnvironment(['APP_ENV' => 'testing', 'DEMO_MODE' => null], function (): void {
+            $config = require config_path('app.php');
+
+            $this->assertFalse($config['demo']['enabled']);
+        });
+    }
+
+    public function test_demo_mode_can_be_enabled_outside_production(): void
+    {
+        $this->withEnvironment(['APP_ENV' => 'staging', 'DEMO_MODE' => 'true'], function (): void {
+            $config = require config_path('app.php');
+
+            $this->assertTrue($config['demo']['enabled']);
+        });
     }
 
     /**
@@ -243,5 +241,80 @@ class LoginTest extends TestCase
             'app.demo.username' => 'hackathon',
             'app.demo.password' => 'hackathon2026',
         ]);
+    }
+
+    /**
+     * Run the callback with the given environment values and restore the previous state afterwards.
+     *
+     * A null value removes the variable for the duration of the callback.
+     *
+     * @param  array<string, string|null>  $values
+     */
+    private function withEnvironment(array $values, Closure $callback): mixed
+    {
+        $original = [];
+
+        foreach ($values as $name => $value) {
+            $original[$name] = [
+                'env' => $_ENV[$name] ?? null,
+                'server' => $_SERVER[$name] ?? null,
+                'putenv' => getenv($name),
+            ];
+
+            $this->setEnvironmentVariable($name, $value);
+        }
+
+        try {
+            return $callback();
+        } finally {
+            foreach ($original as $name => $previous) {
+                $this->restoreEnvironmentVariable($name, $previous);
+            }
+        }
+    }
+
+    /**
+     * Write an environment variable to $_ENV, $_SERVER and the process environment, or remove it.
+     */
+    private function setEnvironmentVariable(string $name, ?string $value): void
+    {
+        if ($value === null) {
+            unset($_ENV[$name], $_SERVER[$name]);
+            putenv($name);
+
+            return;
+        }
+
+        $_ENV[$name] = $value;
+        $_SERVER[$name] = $value;
+        putenv("{$name}={$value}");
+    }
+
+    /**
+     * Restore a single environment variable to its previously captured state.
+     *
+     * @param  array{env: string|null, server: string|null, putenv: string|false}  $previous
+     */
+    private function restoreEnvironmentVariable(string $name, array $previous): void
+    {
+        if ($previous['env'] === null) {
+            unset($_ENV[$name]);
+        } else {
+            $_ENV[$name] = $previous['env'];
+        }
+
+        if ($previous['server'] === null) {
+            unset($_SERVER[$name]);
+        } else {
+            $_SERVER[$name] = $previous['server'];
+        }
+
+        $previousPutenv = $previous['putenv'];
+
+        if ($previousPutenv === false) {
+            putenv($name);
+        } else {
+            putenv("{$name}={$previousPutenv}");
+        }
     }
 }

@@ -94,10 +94,14 @@ return [
     | require a configured username and password, so a missing value fails
     | closed and never produces a usable demo account.
     |
+    | Demo mode is always off when APP_ENV is production; run demo instances
+    | with APP_ENV=staging.
+    |
     */
 
     'demo' => [
-        'enabled' => filter_var(env('DEMO_MODE', false), FILTER_VALIDATE_BOOLEAN),
+        'enabled' => env('APP_ENV', 'production') !== 'production'
+            && filter_var(env('DEMO_MODE', false), FILTER_VALIDATE_BOOLEAN),
         'username' => env('DEMO_USERNAME', 'hackathon'),
         'password' => env('DEMO_PASSWORD'),
     ],
