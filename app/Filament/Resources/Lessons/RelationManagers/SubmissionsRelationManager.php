@@ -22,6 +22,7 @@ use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Livewire\Attributes\On;
@@ -96,6 +97,7 @@ class SubmissionsRelationManager extends RelationManager
                                     ->placeholder('Nicht eingeordnet')
                                     // Never an assessment: an AI hint is marked as such, the teacher's own order stays visible.
                                     ->helperText(fn (?Answer $record): ?string => match (true) {
+                                        $record?->mistake_source === MistakeSource::Teacher && $record->mistake_type === null => 'Von der Lehrkraft: keine Fehlerart',
                                         $record?->mistake_type === null => null,
                                         $record->mistake_source === MistakeSource::Teacher => 'Von der Lehrkraft eingeordnet',
                                         default => 'KI-Hinweis, kann falsch sein',
@@ -147,34 +149,42 @@ class SubmissionsRelationManager extends RelationManager
                     ->action(function (Submission $record, array $data): void {
                         /** @var array<int|string, mixed> $submitted */
                         $submitted = $data['mistakes'] ?? [];
+                        $answers = $record->answers;
 
-                        foreach ($record->answers as $answer) {
-                            // Per answer, so a teacher can only re-classify what they may see: another school never.
-                            Gate::authorize('correctMistake', $answer);
-
-                            // Only the answers of this submission count: an id smuggled in from somewhere else is ignored.
-                            if (! array_key_exists($answer->getKey(), $submitted)) {
-                                continue;
-                            }
-
-                            $type = $submitted[$answer->getKey()];
-                            $mistakeType = match (true) {
-                                $type instanceof MistakeType => $type,
-                                is_string($type) => MistakeType::tryFrom($type),
-                                default => null,
-                            };
-
-                            if ($mistakeType === $answer->mistake_type) {
-                                continue;
-                            }
-
-                            // The teacher's order wins; confidence belongs to an AI source and the score stays untouched.
-                            $answer->update([
-                                'mistake_type' => $mistakeType,
-                                'mistake_confidence' => null,
-                                'mistake_source' => MistakeSource::Teacher,
-                            ]);
+                        // One authority check for the whole action and before anything is written: every answer of a
+                        // submission belongs to the same student, so the policy decides for all of them alike.
+                        if ($answers->isNotEmpty()) {
+                            Gate::authorize('correctMistake', $answers->first());
                         }
+
+                        DB::transaction(function () use ($answers, $submitted): void {
+                            foreach ($answers as $answer) {
+                                // Only the answers of this submission count: an id smuggled in from elsewhere is ignored.
+                                if (! array_key_exists($answer->getKey(), $submitted)) {
+                                    continue;
+                                }
+
+                                $type = $submitted[$answer->getKey()];
+                                $mistakeType = match (true) {
+                                    $type instanceof MistakeType => $type,
+                                    is_string($type) => MistakeType::tryFrom($type),
+                                    default => null,
+                                };
+
+                                // Confirming the AI's type still makes it the teacher's own order; only a state the teacher
+                                // already confirmed stays untouched.
+                                if ($mistakeType === $answer->mistake_type && $answer->mistake_source === MistakeSource::Teacher) {
+                                    continue;
+                                }
+
+                                // The teacher's order wins; confidence belongs to an AI source and the score stays untouched.
+                                $answer->update([
+                                    'mistake_type' => $mistakeType,
+                                    'mistake_confidence' => null,
+                                    'mistake_source' => MistakeSource::Teacher,
+                                ]);
+                            }
+                        });
                     })
                     ->successNotificationTitle('Fehlerarten gespeichert'),
                 DeleteAction::make()

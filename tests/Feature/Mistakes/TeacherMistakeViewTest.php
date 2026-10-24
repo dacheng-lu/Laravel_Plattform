@@ -53,8 +53,8 @@ class TeacherMistakeViewTest extends TestCase
         $miaHomework = $this->evaluatedHomework($this->mia, 'Brüche kürzen üben', '2026-10-01');
         $this->answerWithMistake($miaHomework, $this->fractions, 30, MistakeType::Procedure);
         $this->answerWithMistake($miaHomework, $this->fractions, 25, MistakeType::Procedure);
-        // A strength in another competency: it is no Förderbedarf and therefore gets no mistake line.
-        $this->answerWithMistake($miaHomework, $sentences, 90, MistakeType::Concept);
+        // A strength in another competency: at and above the threshold nothing is classified, so no mistake line shows.
+        $this->answer($miaHomework, $sentences, 90);
 
         $benHomework = $this->evaluatedHomework($this->ben, 'Zähler und Nenner', '2026-10-05');
         $this->answerWithMistake($benHomework, $this->fractions, 30, MistakeType::Procedure);
@@ -68,13 +68,14 @@ class TeacherMistakeViewTest extends TestCase
         $page = Livewire::actingAs($this->teacher)->test(LearningProgress::class);
 
         $page->assertOk()
+            // Positivkontrolle derselben Ansicht: die Verteilung der Kompetenz mit Förderbedarf ist sichtbar …
             ->assertSee('Brüche kürzen')
-            // Mia and Ben made the procedure mistake, Ben and Lena did not get the idea.
             ->assertSee('3× Weg/Schritt falsch')
             ->assertSee('2× Grundidee noch unklar')
             // Never an assessment: the teacher sees that the counts come from a model.
             ->assertSee('KI-Hinweis, kann falsch sein')
-            // The competency the students are strong in stays out of the Förderbedarf part.
+            // … die Stärke-Kompetenz steht zwar auf der Seite, bekommt aber keine Fehlerzeile.
+            ->assertSee('Satzbau')
             ->assertDontSee('1× Grundidee noch unklar');
     }
 
@@ -104,10 +105,21 @@ class TeacherMistakeViewTest extends TestCase
             ->set('schoolClassId', $this->schoolClass->id)
             ->assertForbidden();
 
-        // An admin of another school sees only the classes of their own school.
-        Livewire::actingAs(User::factory()->admin()->create())
+        // An admin sees the classes of their own school – and only those.
+        $admin = User::factory()->admin()->create();
+        $adminClass = SchoolClass::factory()
+            ->for(User::factory()->teacher()->for($admin->school)->create(), 'teacher')
+            ->create(['name' => '3a']);
+        $adminStudent = User::factory()->student($adminClass)->create();
+        $this->answerWithMistake($this->evaluatedHomework($adminStudent, 'Brüche im Alltag', '2026-10-02'), $this->fractions, 20, MistakeType::Incomplete);
+
+        Livewire::actingAs($admin)
             ->test(LearningProgress::class)
-            ->assertOk()
+            ->assertSet('schoolClassId', $adminClass->id)
+            // Positivkontrolle: the admin sees the distribution of their own class.
+            ->assertSee('1× Unvollständig')
+            ->assertSee('KI-Hinweis, kann falsch sein')
+            // But never the distribution of the other school.
             ->assertDontSee('3× Weg/Schritt falsch');
     }
 
