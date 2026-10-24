@@ -2,8 +2,12 @@
 
 namespace App\Livewire\Statistics;
 
+use App\UnderstandingLevel;
+use Illuminate\Support\Str;
+
 /**
  * Average answer score per competency as horizontal bars; competencies with too few students are left out.
+ * Long competency names are shortened on the axis, the bar itself keeps the full figure.
  */
 class CompetencyAveragesChart extends StatisticsChart
 {
@@ -39,9 +43,22 @@ class CompetencyAveragesChart extends StatisticsChart
                 [
                     'label' => 'Ø Punkte',
                     'data' => array_values($averages),
+                    'backgroundColor' => array_map(fn (int $average): string => $this->colorOf($average), array_values($averages)),
                 ],
             ],
-            'labels' => array_keys($averages),
+            'labels' => array_map(fn (string $name): string => Str::limit($name, 34), array_keys($averages)),
         ];
+    }
+
+    /**
+     * The traffic light of "Lernstand & Förderbedarf": understood, partly, needs support.
+     */
+    private function colorOf(int $average): string
+    {
+        return match (UnderstandingLevel::fromScore($average)) {
+            UnderstandingLevel::Understood => '#34d399',
+            UnderstandingLevel::Partly => '#fbbf24',
+            UnderstandingLevel::NeedsSupport => '#f87171',
+        };
     }
 }

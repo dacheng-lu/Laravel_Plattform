@@ -41,6 +41,8 @@ class MistakeTypesChart extends StatisticsChart
             $datasets[] = [
                 'label' => $type->getLabel(),
                 'data' => array_map(fn (array $counts): int => $counts[$type->value], array_values($mistakes)),
+                'backgroundColor' => $this->colorOf($type),
+                'borderColor' => $this->colorOf($type),
             ];
         }
 
@@ -48,5 +50,19 @@ class MistakeTypesChart extends StatisticsChart
             'datasets' => $datasets,
             'labels' => array_keys($mistakes),
         ];
+    }
+
+    /**
+     * One fixed colour per mistake type: stacked bars in a single colour cannot be told apart.
+     */
+    private function colorOf(MistakeType $type): string
+    {
+        return match ($type) {
+            MistakeType::Concept => '#f87171',
+            MistakeType::Procedure => '#fb923c',
+            MistakeType::Incomplete => '#facc15',
+            MistakeType::OffTopic => '#a78bfa',
+            MistakeType::Empty => '#94a3b8',
+        };
     }
 }

@@ -103,7 +103,7 @@ class ClassStatisticsTest extends TestCase
         $this->assertNull($kpis['average_understanding']);
         $this->assertNull($kpis['support_share']);
         $this->assertSame(0, $kpis['evaluated_submissions']);
-        $this->assertSame(0, $kpis['minutes_saved_per_week']);
+        $this->assertNull($kpis['minutes_saved_per_week']);
 
         $this->assertSame([
             ['topic' => 'Aufsatzkorrektur', 'due_on' => today()->addDays(2)->toDateString(), 'rate' => 0],
@@ -132,14 +132,58 @@ class ClassStatisticsTest extends TestCase
         $this->assertSame(2, $statistics->studentCount());
         $this->assertFalse($statistics->hasEnoughStudents());
 
-        // The figures exist, the page hides them: two students are no group, one of them would be recognisable.
-        $this->assertSame(100, $statistics->kpis()['hand_in_rate']);
+        // Every figure is withheld at the data level: two students are no group, one of them would be recognisable.
+        $this->assertNull($statistics->kpis()['hand_in_rate']);
+        $this->assertNull($statistics->kpis()['average_understanding']);
         $this->assertNull($statistics->kpis()['support_share']);
+        $this->assertNull($statistics->kpis()['minutes_saved_per_week']);
+        $this->assertSame(0, $statistics->kpis()['evaluated_submissions']);
 
         $this->assertNull($statistics->understandingTrend()['KW '.today()->isoWeek]);
         $this->assertSame([], $statistics->competencyAverages());
         $this->assertSame([], $statistics->mistakeTypes());
         $this->assertSame([], $statistics->handInRates());
+    }
+
+    public function test_figures_stay_hidden_while_too_few_students_contribute(): void
+    {
+        $historyLesson = $this->publishedLesson('Geschichte', 'Französische Revolution', today()->subDay(), $this->students->take(2));
+        $this->evaluatedSubmission($historyLesson, $this->students[0], 80);
+        $this->evaluatedSubmission($historyLesson, $this->students[1], 80);
+
+        $biologyLesson = $this->publishedLesson('Biologie', 'Fotosynthese', today()->subDay(), $this->students->take(3));
+
+        foreach ($this->students->take(3) as $student) {
+            $this->evaluatedSubmission($biologyLesson, $student, 60);
+        }
+
+        // A subject filter whose homework reached only two students: no rate, no average, no time, no count.
+        $history = $this->statistics('Geschichte');
+        $this->assertNull($history->kpis()['hand_in_rate']);
+        $this->assertNull($history->kpis()['average_understanding']);
+        $this->assertNull($history->kpis()['support_share']);
+        $this->assertNull($history->kpis()['minutes_saved_per_week']);
+        $this->assertSame(0, $history->kpis()['evaluated_submissions']);
+
+        // Positive control: three students are a group, so the figures appear (3 of 3 handed in, Ø 60, 3 × 3 / 10 → 1).
+        $biology = $this->statistics('Biologie');
+        $this->assertSame(100, $biology->kpis()['hand_in_rate']);
+        $this->assertSame(60, $biology->kpis()['average_understanding']);
+        $this->assertSame(3, $biology->kpis()['evaluated_submissions']);
+        $this->assertSame(1, $biology->kpis()['minutes_saved_per_week']);
+    }
+
+    public function test_hand_ins_without_an_understanding_score_are_no_support_need(): void
+    {
+        // Positive control: one of three students lies below the support threshold (1 / 3 = 33 %).
+        $this->assertSame(33, $this->statistics()->kpis()['support_share']);
+
+        $lesson = $this->publishedLesson('Mathematik', 'Kopfrechnen', today()->subDay());
+        Submission::factory()->for($lesson)->for($this->students[3], 'student')
+            ->create(['understanding_score' => null, 'evaluated_at' => now()]);
+
+        // Without a score the hand-in says nothing about the student, so it is no fourth support need.
+        $this->assertSame(33, $this->statistics()->kpis()['support_share']);
     }
 
     public function test_the_trend_lists_every_week_of_the_period_and_hides_small_weeks(): void
@@ -193,24 +237,59 @@ class ClassStatisticsTest extends TestCase
         $this->assertSame(9, $allSubjects->kpis()['evaluated_submissions']);
     }
 
+    public function test_competencies_of_the_same_name_in_two_subjects_stay_apart(): void
+    {
+        $biologyCompetency = Competency::factory()->create(['subject' => 'Biologie', 'name' => 'Sachkompetenz']);
+        $historyCompetency = Competency::factory()->create(['subject' => 'Geschichte', 'name' => 'Sachkompetenz']);
+        $generalCompetency = Competency::factory()->create(['subject' => null, 'name' => 'Methodenkompetenz']);
+
+        $biologyLesson = $this->publishedLesson('Biologie', 'Fotosynthese', today()->subDay(), $this->students->take(3));
+        $historyLesson = $this->publishedLesson('Geschichte', 'Revolution', today()->subDay(), $this->students->take(3));
+
+        foreach ($this->students->take(3) as $student) {
+            $biologySubmission = $this->evaluatedSubmission($biologyLesson, $student, 80);
+            $this->classifiedAnswer($biologySubmission, $biologyLesson, $biologyCompetency, 80, MistakeType::Concept);
+            $this->classifiedAnswer($biologySubmission, $biologyLesson, $generalCompetency, 60, MistakeType::Concept);
+
+            $historySubmission = $this->evaluatedSubmission($historyLesson, $student, 40);
+            $this->classifiedAnswer($historySubmission, $historyLesson, $historyCompetency, 40, MistakeType::Concept);
+        }
+
+        $this->assertSame([
+            'Methodenkompetenz (fachübergreifend)' => 60,
+            'Sachkompetenz (Biologie)' => 80,
+            'Sachkompetenz (Geschichte)' => 40,
+        ], $this->statistics()->competencyAverages());
+
+        // With a subject filter the subject is the same for every entry, so it stays off the label.
+        $this->assertSame(['Sachkompetenz' => 40], $this->statistics('Geschichte')->competencyAverages());
+    }
+
     public function test_data_outside_the_period_does_not_count_and_an_unknown_period_uses_the_default(): void
     {
         $oldLesson = $this->publishedLesson('Mathematik', 'Wiederholung', today()->subWeeks(6));
         $this->evaluatedSubmission($oldLesson, $this->students[0], 20, today()->subWeeks(6));
         $this->evaluatedSubmission($oldLesson, $this->students[1], 20, today()->subWeeks(6));
 
+        $oldestLesson = $this->publishedLesson('Mathematik', 'Grundlagen', today()->subWeeks(8));
+        $this->evaluatedSubmission($oldestLesson, $this->students[2], 100, today()->subWeeks(8));
+
+        // Four weeks: only the six hand-ins of the setup count (390 / 6 = 65).
         $fourWeeks = $this->statistics(weeks: 4);
         $this->assertSame(65, $fourWeeks->kpis()['average_understanding']);
         $this->assertSame(6, $fourWeeks->kpis()['evaluated_submissions']);
         $this->assertSame(75, $fourWeeks->kpis()['hand_in_rate']);
 
+        // Ten weeks: 2 × 20 (6 weeks ago) and 1 × 100 (8 weeks ago) count too → (390 + 40 + 100) / 9 = 58.9 → 59.
         $tenWeeks = $this->statistics();
-        $this->assertSame(54, $tenWeeks->kpis()['average_understanding']);
-        $this->assertSame(8, $tenWeeks->kpis()['evaluated_submissions']);
-        $this->assertSame(67, $tenWeeks->kpis()['hand_in_rate']);
+        $this->assertSame(59, $tenWeeks->kpis()['average_understanding']);
+        $this->assertSame(9, $tenWeeks->kpis()['evaluated_submissions']);
+        $this->assertSame(56, $tenWeeks->kpis()['hand_in_rate']);
 
-        // 7 weeks is not offered, so the default of 10 weeks applies.
-        $this->assertSame($tenWeeks->kpis(), $this->statistics(weeks: 7)->kpis());
+        // 7 weeks is not offered, so the default of 10 weeks applies: the hand-in of eight weeks ago still counts.
+        $sevenWeeks = $this->statistics(weeks: 7);
+        $this->assertSame($tenWeeks->kpis(), $sevenWeeks->kpis());
+        $this->assertNotSame($fourWeeks->kpis(), $tenWeeks->kpis());
     }
 
     public function test_practice_tasks_count_for_competencies_and_saved_time_only(): void
@@ -244,7 +323,7 @@ class ClassStatisticsTest extends TestCase
         // Competencies, mistake types and the saved time include them: 9 hand-ins, 9 × 3 minutes over 10 weeks.
         $this->assertSame(9, $kpis['evaluated_submissions']);
         $this->assertSame(3, $kpis['minutes_saved_per_week']);
-        $this->assertSame(['Rechenwege' => 60], $statistics->competencyAverages());
+        $this->assertSame(['Rechenwege (Mathematik)' => 60], $statistics->competencyAverages());
         $this->assertSame([
             'Mathematik' => [
                 MistakeType::Concept->value => 1,
