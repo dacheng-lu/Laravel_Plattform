@@ -182,11 +182,14 @@ class StatisticsPageTest extends TestCase
             ->assertSee('Alle Fächer')
             ->assertSee('Mathematik')
             ->assertSee('Biologie')
-            ->assertSeeTextInOrder(['Ø Verständnis', '65 %']);
+            ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 70 && $kpis['evaluated_submissions'] === 9);
 
-        $page->set('subject', 'Biologie')->assertSeeTextInOrder(['Ø Verständnis', '80 %', '3 bewertete Abgaben im Zeitraum']);
+        // Six hand-ins with Ø 65 and three with 80: (390 + 240) / 9 = 70.
+        $page->set('subject', 'Biologie')
+            ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 80 && $kpis['evaluated_submissions'] === 3);
 
-        $page->set('subject', null)->assertSeeTextInOrder(['Ø Verständnis', '70 %', '9 bewertete Abgaben im Zeitraum']);
+        $page->set('subject', null)
+            ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 70 && $kpis['evaluated_submissions'] === 9);
     }
 
     public function test_the_period_filter_changes_the_figures(): void
@@ -195,14 +198,15 @@ class StatisticsPageTest extends TestCase
         $this->evaluatedSubmission($oldLesson, $this->students[0], 20, today()->subWeeks(6));
         $this->evaluatedSubmission($oldLesson, $this->students[1], 20, today()->subWeeks(6));
 
+        // Ten weeks: the six hand-ins of the setup (Ø 65) plus two with 20 → (390 + 40) / 8 = 53.75 → 54.
         Livewire::actingAs($this->teacher)
             ->test(Statistics::class)
             ->assertOk()
             ->assertSee('4 Wochen')
             ->assertSee('10 Wochen')
-            ->assertSeeTextInOrder(['Ø Verständnis', '54 %', '8 bewertete Abgaben im Zeitraum'])
+            ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 54 && $kpis['evaluated_submissions'] === 8)
             ->set('weeks', 4)
-            ->assertSeeTextInOrder(['Ø Verständnis', '65 %', '6 bewertete Abgaben im Zeitraum']);
+            ->assertViewHas('kpis', fn (array $kpis): bool => $kpis['average_understanding'] === 65 && $kpis['evaluated_submissions'] === 6);
     }
 
     public function test_the_page_shows_no_individual_results(): void
