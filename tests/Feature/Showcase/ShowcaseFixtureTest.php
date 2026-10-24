@@ -206,21 +206,36 @@ class ShowcaseFixtureTest extends TestCase
 
         $student = $this->user('schueler');
 
+        // Only ordinary homework: a Förderaufgabe reaches two students, so it says nothing about the classwork.
         $open = Lesson::assignedTo($student)
+            ->whereNull('practice_competency_id')
             ->whereNotNull('due_on')
             ->whereDate('due_on', '>=', today())
             ->whereDoesntHave('submissions', fn (Builder $query) => $query->whereBelongsTo($student, 'student'))
             ->count();
 
-        $this->assertGreaterThanOrEqual(1, $open, 'Die Demo-Schülerin hat mindestens eine offene Hausaufgabe.');
+        $openIncludingPracticeTasks = Lesson::assignedTo($student)
+            ->whereNotNull('due_on')
+            ->whereDate('due_on', '>=', today())
+            ->whereDoesntHave('submissions', fn (Builder $query) => $query->whereBelongsTo($student, 'student'))
+            ->count();
+
+        // Two ordinary homework tasks are open for Mia: "Die Kreuzzüge" of the file (due in three days) and the
+        // "Satz des Pythagoras" of the seeder (due in four days). Were only a Förderaufgabe open, the count would be
+        // zero and this test fails; the open Förderaufgabe of the class is the third task behind the filter below.
+        $this->assertSame(2, $open, 'Mia hat zwei offene normale Hausaufgaben.');
+        $this->assertSame(3, $openIncludingPracticeTasks, 'Ohne den Filter zählt die offene Förderaufgabe mit, der Filter blendet sie also wirklich aus.');
 
         $evaluated = Submission::query()
             ->where('student_id', $student->getKey())
             ->whereIn('lesson_id', Lesson::assignedTo($student)->select('lessons.id'))
+            ->whereHas('lesson', fn (Builder $query) => $query->whereNull('practice_competency_id'))
             ->whereNotNull('evaluated_at')
             ->count();
 
-        $this->assertGreaterThanOrEqual(8, $evaluated, 'Die Demo-Schülerin hat mindestens acht bewertete Abgaben.');
+        // Ten evaluated hand-ins of the file plus the remedial triangles lesson and the photosynthesis lesson of the
+        // seeder; nobody handed in the Förderaufgabe, so no practice task can inflate this figure.
+        $this->assertSame(12, $evaluated, 'Mia hat zwölf bewertete Abgaben zu normalen Hausaufgaben.');
     }
 
     public function test_no_generated_text_contains_names_of_demo_students(): void
