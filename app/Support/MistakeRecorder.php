@@ -83,10 +83,10 @@ class MistakeRecorder
             return;
         }
 
-        $answer->update([
-            'mistake_type' => $classification->type,
+        $this->write($answer, [
+            'mistake_type' => $classification->type->value,
             'mistake_confidence' => $classification->confidence,
-            'mistake_source' => $classification->source,
+            'mistake_source' => $classification->source->value,
         ]);
     }
 
@@ -99,11 +99,27 @@ class MistakeRecorder
             return;
         }
 
-        $answer->update([
+        $this->write($answer, [
             'mistake_type' => null,
             'mistake_confidence' => null,
             'mistake_source' => null,
         ]);
+    }
+
+    /**
+     * Writes the row only while it is not a teacher's own correction: that correction may have arrived after the
+     * answer was loaded, and it always has priority over a model.
+     *
+     * @param  array<string, mixed>  $attributes
+     */
+    private function write(Answer $answer, array $attributes): void
+    {
+        Answer::query()
+            ->whereKey($answer->getKey())
+            ->where(fn ($query) => $query
+                ->whereNull('mistake_source')
+                ->orWhere('mistake_source', '!=', MistakeSource::Teacher->value))
+            ->update($attributes);
     }
 
     /**

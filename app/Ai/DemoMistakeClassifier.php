@@ -12,7 +12,8 @@ use App\Models\Question;
  *
  * The rules run in the order of the spec. An empty answer is "no attempt", an answer far shorter than the expected
  * answer is "incomplete", an answer that shares not a single content word with the question and its expected answer
- * is "off topic". Everything else stays unclassified (null): an "unclear" beats a wrong label.
+ * is "off topic". Everything else stays unclassified (null): an "unclear" beats a wrong label. An answer made of
+ * function words only is never "off topic" – it says nothing about the topic, neither for nor against it.
  *
  * The confidences 70 and 65 deliberately sit above the default `min_confidence` of 0.6, so the offline rules apply
  * with the default configuration.
@@ -23,6 +24,15 @@ class DemoMistakeClassifier implements MistakeClassifier
      * Shorter words ("der", "und", "zu") carry no content on their own.
      */
     private const int MINIMUM_CONTENT_WORD_LENGTH = 4;
+
+    /**
+     * Function words that appear in almost every sentence: they never show that an answer is about the question.
+     */
+    private const array STOPWORDS = [
+        'eine', 'einem', 'einen', 'einer', 'eines', 'nicht', 'sind', 'auch', 'dass', 'oder', 'wird', 'werden',
+        'haben', 'über', 'unter', 'durch', 'sich', 'sein', 'ihre', 'ihr', 'diese', 'dieser', 'wenn', 'weil',
+        'aber', 'noch', 'sehr',
+    ];
 
     /**
      * Two words count as the same when their first letters match, so inflections and derivations still count
@@ -44,9 +54,10 @@ class DemoMistakeClassifier implements MistakeClassifier
             return new MistakeClassification(MistakeType::Incomplete, 70, MistakeSource::Demo);
         }
 
+        $answerWords = $this->contentWords($text);
         $reference = $this->contentWords((string) $question->prompt.' '.(string) $question->expected_answer);
 
-        if ($reference !== [] && array_intersect($this->contentWords($text), $reference) === []) {
+        if ($answerWords !== [] && $reference !== [] && array_intersect($answerWords, $reference) === []) {
             return new MistakeClassification(MistakeType::OffTopic, 65, MistakeSource::Demo);
         }
 
@@ -54,8 +65,8 @@ class DemoMistakeClassifier implements MistakeClassifier
     }
 
     /**
-     * Lower-case words without punctuation, short ones dropped – reduced to their first letters, so the words that
-     * carry the content are compared regardless of inflection and derivation.
+     * Lower-case words without punctuation, function words and short ones dropped – reduced to their first letters,
+     * so the words that carry the content are compared regardless of inflection and derivation.
      *
      * @return list<string>
      */
@@ -65,7 +76,8 @@ class DemoMistakeClassifier implements MistakeClassifier
 
         $words = array_filter(
             array_map(mb_strtolower(...), $matches[0]),
-            fn (string $word): bool => mb_strlen($word) >= self::MINIMUM_CONTENT_WORD_LENGTH,
+            fn (string $word): bool => mb_strlen($word) >= self::MINIMUM_CONTENT_WORD_LENGTH
+                && ! in_array($word, self::STOPWORDS, true),
         );
 
         $stems = array_map(

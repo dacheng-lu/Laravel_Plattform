@@ -18,6 +18,7 @@ use App\Support\MistakeRecorder;
 use Closure;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\DB;
 use Livewire\Livewire;
 use Mockery\MockInterface;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -168,34 +169,110 @@ class MistakeRecorderTest extends TestCase
             },
         ));
 
-        $submission = $this->submission(
-            ['first' => 40, 'second' => 40],
-            ['first' => [
-                'mistake_type' => MistakeType::Concept,
-                'mistake_confidence' => 80,
-                'mistake_source' => MistakeSource::Demo,
-            ]],
-        );
-
+        $submission = $this->submission(['first' => 40, 'second' => 40]);
         $failing = $this->answer($submission, 'first');
 
-        // Cleaning up the first answer fails as well: its old hint can neither be kept nor removed.
-        Answer::updating(function (Answer $answer) use ($failing): void {
-            if ($answer->is($failing)) {
-                throw new RuntimeException('Aufräumen fehlgeschlagen');
-            }
-        });
+        // A value no case knows, as a broken row from an older version would have it: reading it while cleaning up
+        // throws. Nothing global is touched, so no listener has to be removed afterwards.
+        DB::table('answers')->where('id', $failing->getKey())->update(['mistake_type' => 'unbekannt']);
 
-        try {
-            $this->record($submission);
-        } finally {
-            Answer::flushEventListeners();
-        }
+        $this->record($submission);
 
-        $this->assertSame(MistakeType::Concept, $this->answer($submission, 'first')->mistake_type);
+        // Fehlerpfad: the cleanup failed, so the unusable value is still there and the loop went on.
+        $this->assertSame('unbekannt', DB::table('answers')->where('id', $failing->getKey())->value('mistake_type'));
 
         // Positivkontrolle: the next answer is still classified.
         $this->assertSame(MistakeType::Incomplete, $this->answer($submission, 'second')->mistake_type);
+    }
+
+    public function test_a_teacher_correction_stored_after_loading_wins(): void
+    {
+        $submission = $this->submission(['first' => 50, 'second' => 50]);
+        $corrected = $this->answer($submission, 'first');
+
+        // While the classifier runs, the teacher's correction reaches the database: the answer loaded before knows
+        // nothing of it, only the conditional write can still see it.
+        app()->instance(MistakeClassifier::class, $this->classifier(
+            function (Question $question, Answer $answer) use ($corrected): MistakeClassification {
+                if ($question->is($this->questions['first'])) {
+                    DB::table('answers')->where('id', $corrected->getKey())->update([
+                        'mistake_type' => MistakeType::Concept->value,
+                        'mistake_confidence' => null,
+                        'mistake_source' => MistakeSource::Teacher->value,
+                    ]);
+                }
+
+                return new MistakeClassification(MistakeType::Procedure, 90, MistakeSource::Claude);
+            },
+        ));
+
+        $this->record($submission);
+
+        $stored = DB::table('answers')->where('id', $corrected->getKey())->first();
+        $this->assertSame(MistakeSource::Teacher->value, $stored->mistake_source);
+        $this->assertSame(MistakeType::Concept->value, $stored->mistake_type);
+
+        // Positivkontrolle: the answer without a correction is written.
+        $written = $this->answer($submission, 'second');
+        $this->assertSame(MistakeType::Procedure, $written->mistake_type);
+        $this->assertSame(MistakeSource::Claude, $written->mistake_source);
+        $this->assertSame(90, $written->mistake_confidence);
+    }
+
+    public function test_the_recorder_runs_in_the_production_path(): void
+    {
+        $calls = 0;
+
+        app()->instance(MistakeClassifier::class, $this->classifier(
+            function (Question $question, Answer $answer) use (&$calls): MistakeClassification {
+                $calls++;
+
+                return new MistakeClassification(MistakeType::Incomplete, 80, MistakeSource::Demo);
+            },
+        ));
+
+        $this->mock(LessonAssistant::class, fn (MockInterface $mock) => $mock->expects('evaluateSubmission')->andReturn([
+            'understanding_score' => 62,
+            'feedback' => 'Fast: das Chlorophyll fehlt.',
+            'gaps' => [],
+            'answers' => [
+                $this->questions['first']->getKey() => ['score' => 84, 'feedback' => 'Richtig erklärt.'],
+                $this->questions['second']->getKey() => ['score' => 70, 'feedback' => 'Da fehlt noch Wesentliches.'],
+            ],
+        ]));
+
+        $this->actingAs($this->student);
+
+        Livewire::test(WorkOnHomework::class, ['lesson' => $this->lesson])
+            ->fillForm([
+                'summary' => 'Pflanzen stellen mit Licht, Wasser und Kohlendioxid Zucker her, dabei entsteht Sauerstoff.',
+                'answers' => [
+                    $this->questions['first']->getKey() => 'Licht, Wasser und Kohlendioxid.',
+                    $this->questions['second']->getKey() => 'Damit sie wachsen kann und Kraft für die Blüte hat.',
+                ],
+            ])
+            ->call('submit')
+            ->assertHasNoFormErrors()
+            ->assertNotified('Geschafft!');
+
+        $submission = Submission::query()->sole();
+
+        $this->assertTrue($submission->isEvaluated());
+        $this->assertSame(62, $submission->understanding_score);
+
+        // At the threshold nothing is classified, so nothing is stored either.
+        $atThreshold = $submission->answers()->whereBelongsTo($this->questions['first'])->sole();
+        $this->assertSame(84, $atThreshold->score);
+        $this->assertNull($atThreshold->mistake_type);
+
+        // Below the threshold the hint of the classifier is stored: the recorder really runs in this path.
+        $belowThreshold = $submission->answers()->whereBelongsTo($this->questions['second'])->sole();
+        $this->assertSame(70, $belowThreshold->score);
+        $this->assertSame(MistakeType::Incomplete, $belowThreshold->mistake_type);
+        $this->assertSame(80, $belowThreshold->mistake_confidence);
+        $this->assertSame(MistakeSource::Demo, $belowThreshold->mistake_source);
+
+        $this->assertSame(1, $calls);
     }
 
     public function test_classifier_failure_fails_closed_over_work_on_homework(): void
