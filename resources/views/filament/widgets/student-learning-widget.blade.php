@@ -80,6 +80,25 @@
             </div>
         </section>
 
+        {{-- Spaced repetition: only there when something is actually due today. --}}
+        @if ($reviewDueCount > 0)
+            <section class="lp-card p-6 lg:col-span-3" aria-labelledby="lp-review-today">
+                <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                    <div class="min-w-48 flex-1">
+                        <h3 id="lp-review-today" class="text-base font-semibold text-gray-950 dark:text-white">Kurz wiederholen</h3>
+
+                        <p class="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                            Fragen aus früheren Hausaufgaben, die heute wieder dran sind.
+                        </p>
+                    </div>
+
+                    <x-filament::button tag="a" :href="$reviewUrl" :icon="Heroicon::OutlinedArrowPath">
+                        Heute wiederholen: {{ $reviewDueCount }} {{ $reviewDueCount === 1 ? 'Frage' : 'Fragen' }}
+                    </x-filament::button>
+                </div>
+            </section>
+        @endif
+
         {{-- What's due next. --}}
         <section class="lp-card p-6 lg:col-span-2" aria-labelledby="lp-next-homework">
             <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
