@@ -53,6 +53,16 @@ class PrivacyDocumentsTest extends TestCase
         return Str::before(Str::after($html, '<article'), '</article>');
     }
 
+    /**
+     * Only the key of every template, for tests that do not need the heading and phrases.
+     *
+     * @return array<string, array{0: string}>
+     */
+    public static function documentKeys(): array
+    {
+        return array_map(fn (array $document): array => [$document[0]], self::documents());
+    }
+
     #[DataProvider('documents')]
     public function test_the_administration_gets_every_template_with_the_data_of_its_school(string $key, string $heading, array $phrases): void
     {
@@ -72,7 +82,7 @@ class PrivacyDocumentsTest extends TestCase
         }
     }
 
-    #[DataProvider('documents')]
+    #[DataProvider('documentKeys')]
     public function test_every_template_says_it_is_only_a_template_and_can_be_printed(string $key): void
     {
         $this->actingAs($this->schoolAdmin());
@@ -181,7 +191,7 @@ class PrivacyDocumentsTest extends TestCase
             ->assertDontSee('Du darfst');
     }
 
-    #[DataProvider('documents')]
+    #[DataProvider('documentKeys')]
     public function test_nothing_in_a_template_loads_from_an_external_host(string $key): void
     {
         $this->actingAs($this->schoolAdmin());
