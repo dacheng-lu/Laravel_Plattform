@@ -38,6 +38,8 @@ class LoginTest extends TestCase
 
     public function test_the_seeded_default_user_can_log_in_with_username(): void
     {
+        $this->enableDemoMode();
+
         $this->seed(DatabaseSeeder::class);
 
         Livewire::test(Login::class)
@@ -51,12 +53,36 @@ class LoginTest extends TestCase
 
     public function test_the_login_form_is_prefilled_with_the_demo_credentials(): void
     {
+        $this->enableDemoMode();
+
         Livewire::test(Login::class)
             ->assertFormSet(['username' => 'hackathon', 'password' => 'hackathon2026']);
     }
 
+    public function test_the_login_form_is_empty_when_demo_mode_is_off(): void
+    {
+        config(['lernplattform.demo.enabled' => false, 'lernplattform.demo.password' => 'hackathon2026']);
+
+        Livewire::test(Login::class)
+            ->assertFormSet(['username' => null, 'password' => null]);
+    }
+
+    public function test_demo_mode_without_a_password_stays_off(): void
+    {
+        config(['lernplattform.demo.enabled' => true, 'lernplattform.demo.password' => '']);
+
+        Livewire::test(Login::class)
+            ->assertFormSet(['username' => null, 'password' => null]);
+
+        $this->get('/login')
+            ->assertOk()
+            ->assertDontSee('Demo-Zugänge');
+    }
+
     public function test_the_login_page_introduces_the_platform_and_lists_the_demo_accounts(): void
     {
+        $this->enableDemoMode();
+
         $this->get('/login')
             ->assertOk()
             ->assertSee('Vom Unterricht zur Hausaufgabe zum Verstehen.')
@@ -65,8 +91,20 @@ class LoginTest extends TestCase
             ->assertSee('hackathon2026');
     }
 
+    public function test_the_demo_accounts_are_hidden_when_demo_mode_is_off(): void
+    {
+        config(['lernplattform.demo.enabled' => false, 'lernplattform.demo.password' => 'hackathon2026']);
+
+        $this->get('/login')
+            ->assertOk()
+            ->assertDontSee('Demo-Zugänge')
+            ->assertDontSee('hackathon2026');
+    }
+
     public function test_a_demo_account_fills_the_login_form(): void
     {
+        $this->enableDemoMode();
+
         Livewire::test(Login::class)
             ->call('fillDemoAccount', 'lehrer')
             ->assertFormSet(['username' => 'lehrer', 'password' => 'hackathon2026'])
@@ -76,8 +114,19 @@ class LoginTest extends TestCase
             ->assertFormSet(['username' => 'schulleitung', 'password' => 'hackathon2026']);
     }
 
+    public function test_fill_demo_account_does_nothing_when_demo_mode_is_off(): void
+    {
+        config(['lernplattform.demo.enabled' => false, 'lernplattform.demo.password' => 'hackathon2026']);
+
+        Livewire::test(Login::class)
+            ->call('fillDemoAccount', 'lehrer')
+            ->assertFormSet(['username' => null]);
+    }
+
     public function test_the_demo_accounts_see_the_start_page_of_their_role(): void
     {
+        $this->enableDemoMode();
+
         $this->seed(DatabaseSeeder::class);
 
         $startPages = [
@@ -123,6 +172,8 @@ class LoginTest extends TestCase
 
     public function test_a_wrong_password_is_rejected(): void
     {
+        $this->enableDemoMode();
+
         $this->seed(DatabaseSeeder::class);
 
         Livewire::test(Login::class)
@@ -131,5 +182,14 @@ class LoginTest extends TestCase
             ->assertHasFormErrors(['username']);
 
         $this->assertGuest();
+    }
+
+    /**
+     * Demo logins are off unless the instance switches them on; every test that expects the prefilled form or the
+     * demo account list has to turn them on explicitly.
+     */
+    private function enableDemoMode(): void
+    {
+        config(['lernplattform.demo.enabled' => true, 'lernplattform.demo.password' => 'hackathon2026']);
     }
 }

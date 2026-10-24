@@ -4,6 +4,7 @@ namespace App\Filament\Pages\Auth;
 
 use App\Http\Middleware\EnsureSchoolIsActive;
 use App\Role;
+use App\Support\DemoMode;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\Login as BaseLogin;
 use Filament\Facades\Filament;
@@ -23,8 +24,9 @@ use SensitiveParameter;
 /**
  * Login with a username instead of Filament's default email field.
  *
- * The form is prefilled with the seeded demo user's credentials (see DatabaseSeeder),
- * and the "Demo-Zugänge" below the form switch it to one of the other demo roles.
+ * In demo mode (see App\Support\DemoMode) the form is prefilled with the seeded demo user's credentials (see
+ * DatabaseSeeder) and the "Demo-Zugänge" below the form switch it to one of the other demo roles. On every other
+ * instance the form stays empty and the list is not rendered at all.
  */
 class Login extends BaseLogin
 {
@@ -39,8 +41,6 @@ class Login extends BaseLogin
         'lehrer' => Role::Teacher,
         'schueler' => Role::Student,
     ];
-
-    public const string DEMO_PASSWORD = 'hackathon2026';
 
     public const string BLOCKED_SCHOOL_MESSAGE = 'Deine Schule ist derzeit gesperrt. Bitte wende dich an die Plattform-Administration.';
 
@@ -77,17 +77,20 @@ class Login extends BaseLogin
             ->components([
                 TextInput::make('username')
                     ->label('Benutzername')
-                    ->default('hackathon')
+                    ->default(fn (): ?string => DemoMode::isActive() ? 'hackathon' : null)
                     ->required()
                     ->autocomplete('username')
                     ->autofocus(),
-                $this->getPasswordFormComponent()->default(self::DEMO_PASSWORD),
+                $this->getPasswordFormComponent()->default(fn (): ?string => DemoMode::isActive() ? DemoMode::password() : null),
                 $this->getRememberFormComponent(),
             ]);
     }
 
     public function content(Schema $schema): Schema
     {
+        // Read the password only while demo mode is on: DemoMode::password() throws otherwise, and the view stays hidden.
+        $demoPassword = DemoMode::isActive() ? DemoMode::password() : '';
+
         return $schema
             ->components([
                 RenderHook::make(PanelsRenderHook::AUTH_LOGIN_FORM_BEFORE),
@@ -95,8 +98,8 @@ class Login extends BaseLogin
                 $this->getMultiFactorChallengeFormContentComponent(),
                 RenderHook::make(PanelsRenderHook::AUTH_LOGIN_FORM_AFTER),
                 View::make('filament.pages.auth.demo-accounts')
-                    ->viewData(['accounts' => self::DEMO_ACCOUNTS, 'password' => self::DEMO_PASSWORD])
-                    ->visible(fn (): bool => blank($this->userUndertakingMultiFactorAuthentication)),
+                    ->viewData(['accounts' => self::DEMO_ACCOUNTS, 'password' => $demoPassword])
+                    ->visible(fn (): bool => DemoMode::isActive() && blank($this->userUndertakingMultiFactorAuthentication)),
             ]);
     }
 
@@ -111,15 +114,20 @@ class Login extends BaseLogin
     }
 
     /**
-     * Fills the form with one of the demo accounts; unknown usernames are ignored.
+     * Fills the form with one of the demo accounts; unknown usernames are ignored and so is every call while
+     * demo mode is off.
      */
     public function fillDemoAccount(string $username): void
     {
+        if (! DemoMode::isActive()) {
+            return;
+        }
+
         if (! array_key_exists($username, self::DEMO_ACCOUNTS)) {
             return;
         }
 
-        $this->form->fill(['username' => $username, 'password' => self::DEMO_PASSWORD]);
+        $this->form->fill(['username' => $username, 'password' => DemoMode::password()]);
     }
 
     /**

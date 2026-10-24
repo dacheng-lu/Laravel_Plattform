@@ -12,6 +12,7 @@ use App\Models\Submission;
 use App\Models\User;
 use App\QuestionType;
 use App\Role;
+use App\Support\DemoMode;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Carbon;
@@ -26,14 +27,20 @@ use Illuminate\Support\Facades\DB;
  *
  * Accounts are updated on every run, which also moves demo accounts and classes of databases from before the schools
  * existed into the demo school. Lessons and sessions are only created when missing, so changes made while trying out
- * the platform survive re-seeding.
+ * the platform survive re-seeding. Every demo account gets the password from DEMO_PASSWORD on every run, so changing
+ * the variable and seeding again rotates all of them. Outside demo mode (see App\Support\DemoMode) the seeder does
+ * nothing at all.
  */
 class DemoSchoolSeeder extends Seeder
 {
-    public const string PASSWORD = 'hackathon2026';
-
     public function run(): void
     {
+        if (! DemoMode::isActive()) {
+            $this->command?->warn('Demo schools skipped: demo mode is off (see config/lernplattform.php, demo).');
+
+            return;
+        }
+
         DB::transaction(function (): void {
             $school = $this->school('4711', 'Gesamtschule am Lernpark', 'Gesamtschule', 'Fulda', 'Hessen', 'sekretariat@lernpark.example');
 
@@ -139,7 +146,7 @@ class DemoSchoolSeeder extends Seeder
     {
         return User::updateOrCreate(
             ['username' => $username],
-            ['name' => $name, 'password' => self::PASSWORD, 'role' => $role, 'school_id' => $school->id, 'school_class_id' => $schoolClass?->id],
+            ['name' => $name, 'password' => DemoMode::password(), 'role' => $role, 'school_id' => $school->id, 'school_class_id' => $schoolClass?->id],
         );
     }
 

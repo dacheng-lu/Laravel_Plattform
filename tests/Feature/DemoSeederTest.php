@@ -7,6 +7,7 @@ use App\Filament\Pages\LearningProgress;
 use App\Filament\Pages\MyHomework;
 use App\Filament\Pages\ParentReport;
 use App\Filament\Pages\WorkOnHomework;
+use App\Models\Competency;
 use App\Models\Lesson;
 use App\Models\School;
 use App\Models\SchoolClass;
@@ -14,6 +15,7 @@ use App\Models\User;
 use App\Role;
 use App\Support\LearningInsights;
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\DemoSchoolSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -25,6 +27,16 @@ class DemoSeederTest extends TestCase
     use RefreshDatabase;
 
     private const array TABLES = ['schools', 'users', 'school_classes', 'competencies', 'lessons', 'questions', 'lesson_user', 'submissions', 'answers', 'explanation_sessions', 'explanation_messages'];
+
+    /**
+     * The demo data only exists in demo mode; every test below that seeds it switches it on here.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        config(['lernplattform.demo.enabled' => true, 'lernplattform.demo.password' => 'hackathon2026']);
+    }
 
     public function test_seeding_twice_creates_no_duplicates(): void
     {
@@ -242,6 +254,41 @@ class DemoSeederTest extends TestCase
     {
         foreach (glob(database_path('seeders/*.php')) as $seeder) {
             $this->assertDoesNotMatchRegularExpression('/::factory\(|\bfake\(|Faker/', file_get_contents($seeder), basename($seeder));
+        }
+    }
+
+    public function test_without_demo_mode_only_the_competency_framework_is_seeded(): void
+    {
+        config(['lernplattform.demo.enabled' => false]);
+
+        $this->seed(DatabaseSeeder::class);
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('schools', 0);
+        $this->assertGreaterThan(0, Competency::query()->count());
+    }
+
+    public function test_the_demo_school_seeder_alone_does_nothing_without_demo_mode(): void
+    {
+        config(['lernplattform.demo.enabled' => false]);
+
+        $this->seed(DemoSchoolSeeder::class);
+
+        $this->assertDatabaseCount('users', 0);
+        $this->assertDatabaseCount('schools', 0);
+    }
+
+    public function test_demo_accounts_take_the_password_from_the_environment(): void
+    {
+        config(['lernplattform.demo.password' => 'anderes-demo-passwort-1']);
+
+        $this->seed(DatabaseSeeder::class);
+
+        foreach (['hackathon', 'schueler'] as $username) {
+            $password = User::query()->where('username', $username)->sole()->password;
+
+            $this->assertTrue(Hash::check('anderes-demo-passwort-1', $password), $username);
+            $this->assertFalse(Hash::check('hackathon2026', $password), $username);
         }
     }
 

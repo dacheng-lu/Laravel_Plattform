@@ -68,4 +68,24 @@ return [
         'final' => (bool) env('LERNPLATTFORM_DPA_FINAL', false),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Demo access (prefilled login, "Demo-Zugänge", demo schools)
+    |--------------------------------------------------------------------------
+    |
+    | Demo logins (the prefilled login form, the "Demo-Zugänge" list on the login page and the demo schools in
+    | DemoSchoolSeeder) are available only when APP_ENV is exactly local, testing, staging or demo, DEMO_MODE is
+    | true and DEMO_PASSWORD is set. Every other combination means off, so an instance that serves real schools
+    | can never show demo logins by accident. Demo instances run with APP_ENV=demo. Changing DEMO_PASSWORD and
+    | seeding again rotates the password of every demo account.
+    |
+    */
+
+    'demo' => [
+        // Demo logins only on non-production instances and only when explicitly switched on.
+        'enabled' => in_array(env('APP_ENV'), ['local', 'testing', 'staging', 'demo'], true)
+            && filter_var(env('DEMO_MODE', false), FILTER_VALIDATE_BOOLEAN),
+        'password' => env('DEMO_PASSWORD'),
+    ],
+
 ];
