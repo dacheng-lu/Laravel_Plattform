@@ -224,18 +224,37 @@ class MistakeGuardrailsTest extends TestCase
 
         $foreignTeacher = User::factory()->teacher()->create();
         $foreignClass = SchoolClass::factory()->for($foreignTeacher, 'teacher')->create(['name' => 'Klasse 9c']);
-        User::factory()->student($foreignClass)->create(['name' => 'Ida Fremd']);
+        $foreignStudent = User::factory()->student($foreignClass)->create(['name' => 'Ida Fremd']);
+        $foreignCompetency = Competency::factory()->create(['subject' => 'Mathematik', 'name' => 'Zahlen ordnen']);
+        $foreignLesson = Lesson::factory()->for($foreignClass)->for($foreignTeacher, 'teacher')->publishedFor([$foreignStudent])->create([
+            'subject' => 'Mathematik',
+            'topic' => 'Zahlen ordnen üben',
+            'held_on' => '2026-10-23',
+        ]);
+        $foreignQuestion = Question::factory()->for($foreignLesson)->create([
+            'competency_id' => $foreignCompetency->id,
+            'type' => QuestionType::Comprehension,
+            'prompt' => 'Ordne die Zahlen der Größe nach.',
+            'position' => 1,
+        ]);
+        // Her own evaluated answer, without any mistake type: the page shows her student, but no distribution.
+        $foreignSubmission = Submission::factory()->for($foreignLesson)->for($foreignStudent, 'student')->evaluated(90)->create();
+        Answer::factory()->for($foreignSubmission)->for($foreignQuestion)->create(['answer' => 'Zwei vor drei.', 'score' => 90]);
 
         // Vorkontrolle: der Negativteil prüft wirklich eine andere Schule und nicht nur eine andere Klasse.
         $this->assertNotSame($schoolClass->school_id, $foreignClass->school_id);
 
         Livewire::actingAs($foreignTeacher)->test(LearningProgress::class)
             ->assertOk()
+            // Positivkontrolle: ihre eigene Klasse und ihre eigene Schülerin stehen auf der Seite …
             ->assertSee('Ida Fremd')
+            ->assertSee('Zahlen ordnen')
+            // … aber keine Fehlerart-Verteilung der anderen Schule und auch keine eigene, weil nichts eingeordnet ist.
             ->assertDontSee(MistakeType::Procedure->getLabel())
             ->assertDontSee(MistakeType::Concept->getLabel())
             ->assertDontSee('KI-Hinweis, kann falsch sein')
-            ->assertDontSee('Mia Hoffmann');
+            ->assertDontSee('Mia Hoffmann')
+            ->assertDontSee('Fachwissen anwenden');
     }
 
     public function test_the_evaluation_request_carries_no_name_of_the_student(): void

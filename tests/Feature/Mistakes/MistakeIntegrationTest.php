@@ -165,13 +165,19 @@ class MistakeIntegrationTest extends TestCase
         $this->handIn($lesson, $student, $first, $second);
 
         $submission = Submission::query()->sole();
-        $this->assertSame(MistakeType::Procedure, $this->answerOfQuestion($submission, $first)->mistake_type);
+        $firstAnswer = $this->answerOfQuestion($submission, $first);
+        $secondAnswer = $this->answerOfQuestion($submission, $second);
 
-        // The teacher's own order on the first answer.
+        // Vorkontrolle: the AI's in-band type reaches both answers of the submission.
+        $this->assertSame(MistakeType::Procedure, $firstAnswer->mistake_type);
+        $this->assertSame(MistakeType::Procedure, $secondAnswer->mistake_type);
+        $this->assertSame(MistakeSource::Claude, $secondAnswer->mistake_source);
+
+        // The teacher's own order on the first answer. The form is keyed by answer id.
         Livewire::actingAs($this->teacher)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $lesson, 'pageClass' => EditLesson::class])
             ->callAction(TestAction::make('correctMistakes')->table($submission), data: [
-                'mistakes' => [$first->getKey() => MistakeType::Concept->value],
+                'mistakes' => [$firstAnswer->getKey() => MistakeType::Concept->value],
             ])
             ->assertNotified('Fehlerarten gespeichert');
 
@@ -378,6 +384,19 @@ class MistakeIntegrationTest extends TestCase
     private function answerOf(User $student, Lesson $lesson): Answer
     {
         return $student->submissions()->where('lesson_id', $lesson->getKey())->sole()->answers()->sole();
+    }
+
+    /**
+     * The competency both PracticeTasks tests practise, named like the one in the class's lessons.
+     */
+    private function fractionsCompetency(): Competency
+    {
+        return Competency::factory()->create([
+            'subject' => 'Mathematik',
+            'area' => 'Zahlen',
+            'name' => 'Brüche kürzen',
+            'description' => 'Zähler und Nenner durch denselben Faktor teilen',
+        ]);
     }
 
     private function answerOfQuestion(Submission $submission, Question $question): Answer

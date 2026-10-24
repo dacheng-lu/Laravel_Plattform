@@ -171,22 +171,29 @@ class SubmissionsRelationManager extends RelationManager
                                     continue;
                                 }
 
-                                $type = $submitted[$answer->getKey()];
+                                // The form declares a select for every answer of this submission, so a request that does
+                                // not carry a value for one of them must leave that answer exactly as it is.
+                                $type = $submitted[$answer->getKey()] ?? null;
+
+                                if ($type === null) {
+                                    continue;
+                                }
+
                                 $mistakeType = match (true) {
                                     $type instanceof MistakeType => $type,
                                     is_string($type) => MistakeType::tryFrom($type),
                                     default => null,
                                 };
 
-                                // Saving the form unchanged must not invent a teacher's order: an answer that has no type
-                                // and gets none back simply stays unclassified, whoever looked at it.
-                                if ($mistakeType === null && $answer->mistake_type === null && $answer->mistake_source !== MistakeSource::Teacher) {
+                                // An unknown value is no decision at all; only the empty option withdraws a type.
+                                if ($mistakeType === null && $type !== '') {
                                     continue;
                                 }
 
-                                // Confirming the AI's type still makes it the teacher's own order; only a state the teacher
-                                // already confirmed stays untouched.
-                                if ($mistakeType === $answer->mistake_type && $answer->mistake_source === MistakeSource::Teacher) {
+                                // Nothing to decide: an answer that has no type and gets none back stays unclassified,
+                                // and a type the teacher already confirmed stays theirs.
+                                if ($mistakeType === $answer->mistake_type
+                                    && ($mistakeType === null || $answer->mistake_source === MistakeSource::Teacher)) {
                                     continue;
                                 }
 
