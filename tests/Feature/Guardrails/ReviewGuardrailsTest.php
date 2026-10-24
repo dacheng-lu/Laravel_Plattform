@@ -65,7 +65,10 @@ class ReviewGuardrailsTest extends TestCase
         $gradedAnswer = Answer::factory()->for($submission)->for($gradedQuestion)->create(['score' => 55]);
         $secondAnswer = Answer::factory()->for($submission)->for($secondQuestion)->create(['score' => 62]);
 
-        $knew = ReviewItem::factory()->for($student, 'student')->for($gradedQuestion)->due()->create();
+        // Zwei fällige Karten in klarer Reihenfolge: die von gestern kommt zuerst, die von heute danach.
+        $knew = ReviewItem::factory()->for($student, 'student')->for($gradedQuestion)
+            ->due(today()->subDay()->toDateString())
+            ->create();
         $forgot = ReviewItem::factory()->for($student, 'student')->for($secondQuestion)->due()->create();
 
         $averagesBefore = LearningInsights::competencyAverages(LearningInsights::scoredAnswers([$student->id]));
@@ -75,11 +78,15 @@ class ReviewGuardrailsTest extends TestCase
 
         $this->actingAs($student);
 
+        // Zuordnung explizit: die erste Karte ist die von gestern, also die bewertete Verständnisfrage.
         Livewire::test(ReviewToday::class)
+            ->assertSee($gradedQuestion->prompt)
             ->call('reveal')
             ->call('rate', ReviewRating::Knew->value);
 
+        // Danach ist die heute fällige Anwendungsfrage dran.
         Livewire::test(ReviewToday::class)
+            ->assertSee($secondQuestion->prompt)
             ->call('reveal')
             ->call('rate', ReviewRating::Forgot->value);
 
@@ -150,9 +157,11 @@ class ReviewGuardrailsTest extends TestCase
             ReviewRating::Forgot->getLabel(),
         ];
 
-        // Positivkontrolle: die Schülerin sieht die Einschätzung auf ihrer Seite.
+        // Positivkontrolle: auf ihrer eigenen Seite stehen Titel und Einschätzung – genau die Zeichenketten,
+        // die Lernstand, Elternbericht und Verwaltungs-Export unten nicht zeigen dürfen.
         $this->actingAs($viewer);
         Livewire::test(ReviewToday::class)
+            ->assertSee('Heute wiederholen')
             ->call('reveal')
             ->assertSee($labels);
 
@@ -171,12 +180,14 @@ class ReviewGuardrailsTest extends TestCase
             ->assertDontSee($labels)
             ->assertDontSee('Heute wiederholen');
 
-        // Die eigene Auskunft enthält die Wiederholungsdaten, die Kopie der Verwaltung nicht.
+        // Leitplanke "privat": die vollständige Auskunft inkl. 'wiederholen' bekommt nur die Schülerin selbst.
+        // Positivkontrolle dafür, dass der Schlüssel überhaupt existiert und gefüllt ist.
         $own = PersonalDataExport::for($viewer);
         $this->assertArrayHasKey('wiederholen', $own);
         $this->assertArrayHasKey('sofort_gewusst', $own['wiederholen'][0]);
         $this->assertSame(1, collect($own['wiederholen'])->sum('sofort_gewusst'));
 
+        // Die Datenauskunft der Schulleitung (Fremd-Viewer und EditUser-Download) enthält keine Selbsteinschätzungen.
         $forAdmin = PersonalDataExport::for($viewer, $admin);
         $this->assertArrayNotHasKey('wiederholen', $forAdmin);
         $this->assertSame('Mia Hoffmann', $forAdmin['konto']['name']);

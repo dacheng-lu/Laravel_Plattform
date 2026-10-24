@@ -169,6 +169,7 @@ class MistakeGuardrailsTest extends TestCase
             ]));
 
         $this->mock(MistakeClassifier::class, fn (MockInterface $mock) => $mock->expects('classify')
+            ->once()
             ->andReturn(new MistakeClassification(MistakeType::Procedure, 90, MistakeSource::Demo)));
 
         $this->actingAs($student);
@@ -178,6 +179,7 @@ class MistakeGuardrailsTest extends TestCase
         $this->assertSame(MistakeType::Procedure, $student->submissions()->sole()->answers()->sole()->mistake_type);
 
         $this->mock(MistakeClassifier::class, fn (MockInterface $mock) => $mock->expects('classify')
+            ->once()
             ->andThrow(new RuntimeException('Klassifizierer nicht erreichbar')));
 
         $this->handIn($second, $student);
@@ -223,6 +225,9 @@ class MistakeGuardrailsTest extends TestCase
         $foreignTeacher = User::factory()->teacher()->create();
         $foreignClass = SchoolClass::factory()->for($foreignTeacher, 'teacher')->create(['name' => 'Klasse 9c']);
         User::factory()->student($foreignClass)->create(['name' => 'Ida Fremd']);
+
+        // Vorkontrolle: der Negativteil prüft wirklich eine andere Schule und nicht nur eine andere Klasse.
+        $this->assertNotSame($schoolClass->school_id, $foreignClass->school_id);
 
         Livewire::actingAs($foreignTeacher)->test(LearningProgress::class)
             ->assertOk()
@@ -275,26 +280,33 @@ class MistakeGuardrailsTest extends TestCase
 
         $evaluation = app(LessonAssistant::class)->evaluateSubmission($submission->load('answers'));
 
-        Http::assertSent(function (Request $request): bool {
-            // Der dekodierte Text: so kommt er bei der KI an, Umlaute eingeschlossen.
-            $data = $request->data();
-            $text = collect($data['messages'][0]['content'])
-                ->where('type', 'text')
-                ->pluck('text')
-                ->implode("\n");
+        $recorded = Http::recorded();
+        $this->assertCount(1, $recorded, 'Genau eine Anfrage an die KI.');
 
-            // Positivkontrolle: der Antworttext und die Zusammenfassung sind enthalten, nur der Name nicht.
-            $this->assertStringContainsString('hat gezählt, dass die Wasserpest im Licht Bläschen bildet.', $text);
-            $this->assertStringContainsString('hat gesehen, dass die Pflanze im Licht Bläschen bildet.', $text);
-            $this->assertStringContainsString('Schüler:in', $text);
+        $request = $recorded->first()[0];
+        $this->assertInstanceOf(Request::class, $request);
 
-            $this->assertStringNotContainsString('Zacharias', $text);
-            $this->assertStringNotContainsString('Quellenberg', $text);
-            $this->assertStringNotContainsStringIgnoringCase('zquellenberg', $text);
-            $this->assertStringNotContainsStringIgnoringCase('zquellenberg', $data['system']);
+        // Der dekodierte Text: so kommt er bei der KI an, Umlaute eingeschlossen.
+        $data = $request->data();
+        $text = collect($data['messages'][0]['content'])
+            ->where('type', 'text')
+            ->pluck('text')
+            ->implode("\n");
+        // Der System-Prompt ist je nach Aufbau ein String oder eine Liste von Text-Blöcken.
+        $system = json_encode($data['system'] ?? '');
 
-            return true;
-        });
+        // Positivkontrolle: Antwort und Zusammenfassung gehen mit, nur der Name nicht.
+        $this->assertStringContainsString('hat gezählt, dass die Wasserpest im Licht Bläschen bildet.', $text);
+        $this->assertStringContainsString('hat gesehen, dass die Pflanze im Licht Bläschen bildet.', $text);
+        $this->assertStringContainsString('Schüler:in', $text);
+
+        $this->assertStringNotContainsString('Zacharias', $text);
+        $this->assertStringNotContainsString('Quellenberg', $text);
+        $this->assertStringNotContainsStringIgnoringCase('zquellenberg', $text);
+
+        $this->assertStringNotContainsString('Zacharias', $system);
+        $this->assertStringNotContainsString('Quellenberg', $system);
+        $this->assertStringNotContainsStringIgnoringCase('zquellenberg', $system);
 
         // Positivkontrolle: die Antwort der KI kommt beim Aufrufer an, die Bewertung selbst bleibt unverändert.
         $this->assertSame(55, $evaluation['answers'][$question->id]['score']);
