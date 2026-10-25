@@ -512,8 +512,9 @@
         sie leiten oder unterrichten, die Verteilung je Kompetenz und den Einzelhinweis neben der Antwort,
         gekennzeichnet als „KI-Hinweis, kann falsch sein“ oder, wenn die Regeln der Plattform eingeordnet haben, als
         „Regel-Hinweis, kann falsch sein“. Andere Schüler:innen und andere Schulen sehen nichts. Für eine Einordnung
-        durch die KI gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter (Abschnitt 7); Arbeitsblätter
-        gehen bei der Auswertung einer Abgabe nicht mit. Die Fehlerart wird mit der Antwort gelöscht, die Datenauskunft im Profil
+        durch die KI gehen Frage, Erwartungshorizont und Antworttext an den KI-Anbieter (Abschnitt 7); Notizen der
+        Lehrkraft, Zusammenfassungen und Arbeitsblätter gehen bei der Auswertung einer Abgabe nicht mit.
+        Die Fehlerart wird mit der Antwort gelöscht, die Datenauskunft im Profil
         nennt sie samt Quelle.
     </p>
     <p>
@@ -650,17 +651,18 @@
         </div>
         <h3>Was übermittelt wird</h3>
         <ul>
-            <li>Texte der Unterrichtsstunden, also Notizen, Tafelbild oder Transkripttext</li>
+            <li>Texte der Unterrichtsstunden, also Notizen, Tafelbild oder Transkripttext – nur beim Hausaufgaben-Entwurf, nicht bei der Auswertung einer Abgabe</li>
             <li>hochgeladene Arbeitsblätter als Bild oder PDF – nur beim Hausaufgaben-Entwurf, nicht bei der Auswertung einer Abgabe</li>
-            <li>Texte der Schüler:innen: Zusammenfassungen, Antworten und Beiträge im „Erklär’s mir“-Chat</li>
+            <li>Texte der Schüler:innen: Antworten (bei der Auswertung) und Beiträge im „Erklär’s mir“-Chat; Zusammenfassungen nur beim Hausaufgaben-Entwurf</li>
         </ul>
         <p>
             Namen, Benutzernamen und Benutzerkennungen werden nicht übermittelt. Bei der Auswertung einer Abgabe, beim
             Hausaufgaben-Entwurf und beim Entwurf einer Förderaufgabe ersetzt die Plattform außerdem vorher die Namen
             der Klasse und der Lehrkraft durch Platzhalter („Schüler:in A“, „Lehrkraft“). Das ist eine technische
             Hilfe und keine Anonymisierung: Unbekannte Namen, Spitznamen und Fehler der Spracherkennung bleiben im
-            Text. Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine Arbeitsblatt-Dateien; beim
-            Hausaufgaben-Entwurf gehen hochgeladene Arbeitsblätter als Bild oder PDF unverändert mit. Im „Erklär’s
+            Text. Bei der Auswertung einer Abgabe gehen nur Frage, Erwartungshorizont und Antworttext an die KI – keine
+            Notizen der Lehrkraft, keine Zusammenfassungen, keine Arbeitsblatt-Dateien; beim Hausaufgaben-Entwurf
+            gehen hochgeladene Arbeitsblätter als Bild oder PDF unverändert mit. Im „Erklär’s
             mir“-Chat ersetzt die Plattform nichts. Deshalb bitten wir alle, keine persönlichen Angaben in Texte zu
             schreiben.
         </p>

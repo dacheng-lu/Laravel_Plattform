@@ -60,7 +60,10 @@ class PracticeTaskMistakeFocusTest extends TestCase
 
         $this->assertSame(QuestionType::Application, $procedure['questions'][0]['type']);
         $this->assertStringStartsWith('Schritt für Schritt: ', $procedure['questions'][0]['prompt']);
-        $this->assertStringContainsString('beschreibe deinen Weg in einzelnen Schritten', $procedure['questions'][0]['prompt']);
+        // The spec asks for a worked example with sub-steps, not for the student to describe her own steps.
+        $this->assertStringContainsString('durchgerechnetes Beispiel mit Teilschritten', $procedure['questions'][0]['prompt']);
+        $this->assertStringContainsString('schreibe deine Teilschritte auf', $procedure['questions'][0]['prompt']);
+        $this->assertStringNotContainsString('beschreibe deinen Weg in einzelnen Schritten', $procedure['questions'][0]['prompt']);
         // No stacked headings and no repeated phrase: the offline heading "Jetzt wird es praktisch:" is gone.
         $this->assertStringNotContainsString('Jetzt wird es praktisch:', $procedure['questions'][0]['prompt']);
         $this->assertSame(1, substr_count($procedure['questions'][0]['prompt'], 'Schritt für Schritt'));
@@ -100,7 +103,7 @@ class PracticeTaskMistakeFocusTest extends TestCase
         foreach (['concept' => $concept, 'procedure' => $procedure] as $variant => $draft) {
             $applications = array_filter($draft['questions'], fn (array $question): bool => $question['type'] === QuestionType::Application);
 
-            $this->assertGreaterThanOrEqual(1, count($applications), $variant);
+            $this->assertCount(1, $applications, $variant);
         }
 
         // Positivkontrolle: no mistake type (missing argument or explicit null) leaves the draft exactly as it was.

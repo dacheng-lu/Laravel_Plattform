@@ -162,7 +162,7 @@ class DemoLessonAssistant implements LessonAssistant
 
         // The group's most common mistake type decides the order and the wording; without one the draft stays as it is.
         if ($mistakeType === MistakeType::Procedure) {
-            $questions = $this->applicationFirst($questions, "Schritt für Schritt: Finde ein eigenes Beispiel aus deinem Alltag, bei dem „{$term(1)}“ eine Rolle spielt, und beschreibe deinen Weg in einzelnen Schritten. Damit übst du „{$competency->name}“.");
+            $questions = $this->applicationFirst($questions, "Schritt für Schritt: Ein durchgerechnetes Beispiel mit Teilschritten zeigt dir den Weg – 1. die Aufgabe aus „{$term(1)}“ aufschreiben, 2. den ersten Teilschritt rechnen, 3. den zweiten Teilschritt rechnen, 4. das Ergebnis prüfen. Rechne es mit deinem eigenen Beispiel aus dem Alltag nach und schreibe deine Teilschritte auf. Damit übst du „{$competency->name}“.");
         } elseif ($mistakeType === MistakeType::Concept) {
             $explanation = $description !== '' ? $this->sentenceEnd($description) : ($sentences[0] ?? "Schau dir die Stunde „{$topic}“ noch einmal an.");
             $questions = $this->explanationFirst($questions, "Lies zuerst die kurze Erklärung: {$explanation} Erkläre danach mit eigenen Worten, was man unter „{$term(0)}“ versteht.");

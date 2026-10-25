@@ -252,8 +252,9 @@ class PrivacyDocumentsTest extends TestCase
                 ->assertSee('können Namen enthalten')
                 ->assertSee('Bei der Auswertung einer Aufnahme ersetzt die Plattform')
                 ->assertSee('bei der Auswertung einer Abgabe')
-                // D1: die Auswertung einer Abgabe schickt keine Arbeitsblatt-Dateien mehr mit.
-                ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an den Anbieter, keine Arbeitsblatt-Dateien')
+                // D1/Entscheidung A: die Auswertung einer Abgabe schickt nur Frage, Erwartungshorizont und Antworttext.
+                ->assertSee('Bei der Auswertung einer Abgabe gehen nur Frage, Erwartungshorizont und Antworttext an den Anbieter')
+                ->assertSee('keine Notizen der Lehrkraft, keine Zusammenfassungen, keine Arbeitsblatt-Dateien')
                 ->assertDontSee('Vor jeder KI-Auswertung')
                 ->assertDontSee('ohne Namen und Benutzerkennungen')
                 ->assertDontSee('Für die KI gehen nur Texte, nie Audio, und nur pseudonymisiert')

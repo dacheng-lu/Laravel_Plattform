@@ -119,32 +119,35 @@ class MistakePrivacyDocumentsTest extends TestCase
         $this->open('legal.privacy')
             ->assertOk()
             ->assertSee('Erklär’s mir')
-            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine Arbeitsblatt-Dateien')
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Frage, Erwartungshorizont und Antworttext an die KI')
+            ->assertSee('Notizen der Lehrkraft, keine Zusammenfassungen, keine Arbeitsblatt-Dateien')
             ->assertSee('gehen hochgeladene Arbeitsblätter als Bild oder PDF unverändert mit');
 
         $this->open('privacy-documents.dsfa')
             ->assertOk()
             ->assertSee('Datenschutz-Folgenabschätzung (Art. 35 DSGVO)')
-            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an den Anbieter, keine Arbeitsblatt-Dateien')
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Frage, Erwartungshorizont und Antworttext an den Anbieter')
+            ->assertSee('keine Notizen der Lehrkraft, keine Zusammenfassungen, keine Arbeitsblatt-Dateien')
             ->assertSee('Für die Fehlerart einer Antwort wertet die Plattform Frage, Erwartungshorizont und Antworttext aus')
             ->assertSee('Arbeitsblatt-Dateien gehen bei dieser Auswertung nicht mit');
 
         $this->open('privacy-documents.verzeichnis')
             ->assertOk()
             ->assertSee('Fehlerart der Antworten')
-            ->assertSee('bei der Auswertung einer Abgabe nur Texte ohne Arbeitsblatt-Dateien')
+            ->assertSee('bei der Auswertung einer Abgabe nur Frage, Erwartungshorizont und Antworttext ohne Notizen, Zusammenfassungen oder Arbeitsblatt-Dateien')
             ->assertSee('Arbeitsblatt-Dateien gehen bei der Auswertung einer Abgabe nicht mit');
 
         $this->open('privacy-documents.elterninformation')
             ->assertOk()
             ->assertSee('Künstliche Intelligenz')
-            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine hochgeladenen Arbeitsblätter')
-            ->assertSee('beim Hausaufgaben-Entwurf gehen sie unverändert mit und können Namen enthalten');
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur die Frage, der Erwartungshorizont und die Antwort Ihres Kindes an die KI')
+            ->assertSee('beim Hausaufgaben-Entwurf gehen Notizen und Arbeitsblätter unverändert mit und können Namen enthalten');
 
         $this->open('privacy-documents.checkliste')
             ->assertOk()
             ->assertSee('Checkliste für die Einführung')
-            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Texte an die KI, keine Arbeitsblatt-Dateien (Fotos, PDF)');
+            ->assertSee('Bei der Auswertung einer Abgabe gehen nur Frage, Erwartungshorizont und Antworttext an die KI')
+            ->assertSee('keine Notizen, keine Zusammenfassungen, keine Arbeitsblatt-Dateien (Fotos, PDF)');
     }
 
     public function test_the_privacy_policy_names_the_ai_provider_only_while_the_connection_is_on(): void

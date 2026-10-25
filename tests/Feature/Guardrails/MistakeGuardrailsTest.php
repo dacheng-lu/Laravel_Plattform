@@ -35,7 +35,7 @@ use Tests\TestCase;
 /**
  * Leitplanken of the mistake types (issue #3): a hint, never a mark; not in the parents' report; never across
  * schools; no name at the AI; fail closed; and only the five mistake types of the spec.
- * Written against the contract (K) and the signatures of lanes B1/B2/B3, so it stays red until those are merged.
+ * The contract (K) and the lanes B1/B2/B3 are merged on this branch, so these tests guard the live implementation.
  *
  * Every negative assertion has its positive control in the same test.
  */
@@ -360,10 +360,15 @@ class MistakeGuardrailsTest extends TestCase
         // Der System-Prompt ist je nach Aufbau ein String oder eine Liste von Text-Blöcken.
         $system = json_encode($data['system'] ?? '');
 
-        // Positivkontrolle: Antwort und Zusammenfassung gehen mit, nur der Name nicht.
+        // Positivkontrolle: die Antwort geht mit, nur der Name nicht.
         $this->assertStringContainsString('hat gezählt, dass die Wasserpest im Licht Bläschen bildet.', $text);
-        $this->assertStringContainsString('hat gesehen, dass die Pflanze im Licht Bläschen bildet.', $text);
         $this->assertStringContainsString('Schüler:in', $text);
+
+        // Entscheidung A (Issue #3): weder die Zusammenfassung der Schülerin noch die Notizen der Lehrkraft noch der
+        // Stundenkontext gehen mit – nur Frage, Erwartungshorizont und Antwort.
+        $this->assertStringNotContainsString('hat gesehen, dass die Pflanze im Licht Bläschen bildet.', $text);
+        $this->assertStringNotContainsString('Wasserpest unter der Lampe', $text);
+        $this->assertStringNotContainsString('Fach: Biologie', $text);
 
         $this->assertStringNotContainsString('Zacharias', $text);
         $this->assertStringNotContainsString('Quellenberg', $text);

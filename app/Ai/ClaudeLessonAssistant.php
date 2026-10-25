@@ -133,14 +133,10 @@ class ClaudeLessonAssistant implements LessonAssistant
         $lesson = $submission->lesson;
         $answers = $submission->answers()->get()->keyBy('question_id');
         $pseudonymizer = $this->pseudonymizerFor($lesson, $submission->student?->name);
-        $ownSummary = (string) $submission->summary;
-        $ownSummary = trim($ownSummary) === '' ? '(keine Zusammenfassung)' : $pseudonymizer->apply($ownSummary);
         $threshold = (int) config('lernplattform.mistakes.threshold', 80);
         // With the mistake types switched off the request carries neither the schema fields nor a word about them: an
         // answer then simply stays unclassified, whatever the AI would have said.
         $mistakesEnabled = (bool) config('lernplattform.mistakes.enabled');
-        // The teacher's notes and summary name students as well, so they go through the same pseudonymizer.
-        $lessonContext = $pseudonymizer->apply($this->lessonContext($lesson));
 
         $questions = $lesson->questions->map(fn (Question $question): string => implode("\n", [
             "Frage-ID {$question->id} ({$question->type->getLabel()}): ".$pseudonymizer->apply((string) $question->prompt),
@@ -160,16 +156,16 @@ class ClaudeLessonAssistant implements LessonAssistant
         }
 
         $result = $this->ask(
-            system: self::ROLE_PROMPT.' Du prüfst Hausaufgaben darauf, ob die Schülerin oder der Schüler die Stunde verstanden hat. Vergleiche die eigene Zusammenfassung und die Antworten mit den Notizen der Lehrkraft und dem Erwartungshorizont. Reflexionsfragen haben keine einzig richtige Antwort: Bewerte dort den Bezug zur Stunde, eigene Gedanken und Begründungen. Alle Punktzahlen liegen zwischen 0 und 100. Das Feedback ist ermutigend, konkret und richtet sich direkt an die Schülerin oder den Schüler. Nenne in gaps höchstens drei kurze Hinweise, was noch einmal wiederholt werden sollte. Zitiere den Erwartungshorizont nicht wörtlich.'
+            system: self::ROLE_PROMPT.' Du prüfst Hausaufgaben darauf, ob die Schülerin oder der Schüler die Stunde verstanden hat. Vergleiche jede Antwort mit dem Erwartungshorizont. Reflexionsfragen haben keine einzig richtige Antwort: Bewerte dort eigene Gedanken und Begründungen. Alle Punktzahlen liegen zwischen 0 und 100. Das Feedback ist ermutigend, konkret und richtet sich direkt an die Schülerin oder den Schüler. Nenne in gaps höchstens drei kurze Hinweise, was noch einmal wiederholt werden sollte. Zitiere den Erwartungshorizont nicht wörtlich.'
                 .($mistakesEnabled
                     ? ' Nur wenn die Punktzahl einer Antwort unter '.$threshold.' liegt, ordnest du zusätzlich ihre Fehlerart ein (mistake_type) und nennst deine Sicherheit von 0 bis 100 (mistake_confidence); ab dieser Punktzahl setzt du beides auf null. Ordne die Antwort ein, nie die Person; keine Aussagen über Motivation oder Gefühle.'
                     : ''),
             content: [
-                // Spec guardrail: the evaluation carries texts only – question, expected answer, the student's own
-                // answer, summary and notes. Worksheet files stay on the platform; only the homework draft sends them.
-                ['type' => 'text', 'text' => $lessonContext
-                    ."\n\nEigene Zusammenfassung der Schülerin oder des Schülers:\n".$ownSummary
-                    ."\n\nFragen und Antworten:\n".$questions],
+                // Issue #3, decision A: an evaluation carries the question, its expected answer and the student's own
+                // answer – nothing else. No lesson context (Fach/Thema/Datum), no summary of the teacher, no notes of
+                // the student, no worksheet files. The names inside these three texts are still replaced before they
+                // leave the platform.
+                ['type' => 'text', 'text' => "Fragen und Antworten:\n".$questions],
             ],
             schema: $this->objectSchema([
                 'understanding_score' => ['type' => 'integer'],

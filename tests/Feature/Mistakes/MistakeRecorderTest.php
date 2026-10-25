@@ -130,14 +130,21 @@ class MistakeRecorderTest extends TestCase
 
     public function test_min_confidence(): void
     {
-        config()->set('lernplattform.mistakes.min_confidence', 0.6);
+        $firstConfidence = 59;
+        $secondConfidence = 60;
+
         app()->instance(MistakeClassifier::class, $this->classifier(
-            fn (Question $question, Answer $answer): MistakeClassification => new MistakeClassification(
-                MistakeType::Concept,
-                $question->is($this->questions['first']) ? 59 : 61,
-                MistakeSource::Demo,
-            ),
+            function (Question $question, Answer $answer) use (&$firstConfidence, &$secondConfidence): MistakeClassification {
+                return new MistakeClassification(
+                    MistakeType::Concept,
+                    $question->is($this->questions['first']) ? $firstConfidence : $secondConfidence,
+                    MistakeSource::Demo,
+                );
+            },
         ));
+
+        // 0.6 is a share: 59 of 100 stays below it, 60 reaches it.
+        config()->set('lernplattform.mistakes.min_confidence', 0.6);
 
         $submission = $this->submission(['first' => 50, 'second' => 50]);
 
@@ -148,11 +155,24 @@ class MistakeRecorderTest extends TestCase
         $this->assertNull($unsure->mistake_confidence);
         $this->assertNull($unsure->mistake_source);
 
-        // Positivkontrolle: 61 of 100 reaches the configured 0.6.
         $sure = $this->answer($submission, 'second');
         $this->assertSame(MistakeType::Concept, $sure->mistake_type);
-        $this->assertSame(61, $sure->mistake_confidence);
+        $this->assertSame(60, $sure->mistake_confidence);
         $this->assertSame(MistakeSource::Demo, $sure->mistake_source);
+
+        // 0.604 demands 60.4: a confidence of 60 still stays below it, 61 reaches it. A minimum rounded to a whole
+        // number (60) would let 60 through – the comparison therefore uses the share itself.
+        config()->set('lernplattform.mistakes.min_confidence', 0.604);
+        $firstConfidence = 60;
+        $secondConfidence = 61;
+
+        $strict = $this->submission(['first' => 50, 'second' => 50]);
+
+        $this->record($strict);
+
+        $this->assertNull($this->answer($strict, 'first')->mistake_type);
+        $this->assertSame(MistakeType::Concept, $this->answer($strict, 'second')->mistake_type);
+        $this->assertSame(61, $this->answer($strict, 'second')->mistake_confidence);
     }
 
     /**

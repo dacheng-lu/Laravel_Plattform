@@ -40,6 +40,8 @@ class ClaudeEvaluationMistakeTest extends TestCase
     public function test_request_is_pseudonymised(): void
     {
         [$submission, $question, $student] = $this->submissionNamingTheStudent();
+        // A teacher's summary of the lesson: it names no one, but it must not leave the platform either.
+        $submission->lesson->update(['summary' => 'Lehrkraft-Zusammenfassung: Wasserpest, Licht und Bläschen.']);
 
         Http::fake(['api.anthropic.com/*' => $this->messageResponse([
             'understanding_score' => 62,
@@ -74,16 +76,18 @@ class ClaudeEvaluationMistakeTest extends TestCase
             $this->assertSame(987654, $student->getKey());
             $this->assertDoesNotMatchRegularExpression('/\b987654\b/', $body);
 
-            // Positivkontrolle: the texts arrive, the names became neutral labels, and the question id is still labelled.
-            $this->assertSame(3, substr_count($body, 'Schüler:in A'));
-            $this->assertStringContainsString('Schüler:in A hat die Bläschen gezählt', $body);
-            $this->assertStringContainsString('Schüler:in B hat sie notiert', $body);
-            $this->assertStringContainsString('Wasserpest unter der Lampe', $body);
-            $this->assertStringContainsString('Sauerstoffbläschen', $body);
-            $this->assertStringContainsString('hat gesehen, dass Pflanzen Licht brauchen', $body);
-            $this->assertStringContainsString('Licht und Wasser reichen schon', $body);
+            // Positivkontrolle: Frage, Erwartungshorizont und Antwort gehen mit, die Namen darin sind ersetzt.
+            $this->assertSame(1, substr_count($body, 'Schüler:in A'));
+            $this->assertStringContainsString('Schüler:in A sagt: Licht und Wasser reichen schon.', $body);
             $this->assertStringContainsString('Was braucht die Pflanze für die Fotosynthese?', $body);
+            $this->assertStringContainsString('Licht, Wasser und Kohlenstoffdioxid.', $body);
             $this->assertMatchesRegularExpression('/\b'.$question->id.'\b/', $body);
+
+            // Entscheidung A (Issue #3): Stundenkontext und Zusammenfassungen bleiben auf der Plattform – weder die
+            // Notizen der Lehrkraft noch ihre Zusammenfassung noch die Zusammenfassung der Schülerin gehen mit.
+            $this->assertStringNotContainsString('Wasserpest unter der Lampe', $body);
+            $this->assertStringNotContainsString('Lehrkraft-Zusammenfassung', $body);
+            $this->assertStringNotContainsString('hat gesehen, dass Pflanzen Licht brauchen', $body);
 
             return true;
         });

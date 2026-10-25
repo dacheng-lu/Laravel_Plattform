@@ -22,7 +22,7 @@ class MistakeRecorder
     /**
      * Higher than any possible confidence (0–100): used when the configured minimum is not a share between 0 and 1.
      */
-    private const int UNREACHABLE_CONFIDENCE = 101;
+    private const float UNREACHABLE_CONFIDENCE = 101.0;
 
     /**
      * Reads `mistake_type` and `mistake_confidence` from the evaluation and writes them to the answers.
@@ -59,7 +59,7 @@ class MistakeRecorder
     /**
      * @param  array<string, mixed>  $evaluation
      */
-    private function record(Answer $answer, array $evaluation, int $threshold, int $minimumConfidence): void
+    private function record(Answer $answer, array $evaluation, int $threshold, float $minimumConfidence): void
     {
         // A teacher's own correction has priority over every model, and an unscored answer is not yet judged.
         if ($answer->mistake_source === MistakeSource::Teacher || $answer->score === null) {
@@ -123,11 +123,12 @@ class MistakeRecorder
     }
 
     /**
-     * `min_confidence` as a 0–100 value; anything outside 0–1 is unusable, so no confidence ever reaches it.
+     * `min_confidence` as a 0–100 value, unrounded: a share of 0.604 demands at least 60.4, so a confidence of 60 does
+     * not pass. Anything outside 0–1 is unusable, so no confidence ever reaches it.
      * The config hands out `null` for a value that is not a number at all (see `config/lernplattform.php`), which
      * is unusable here as well – an unreadable minimum never opens the gate.
      */
-    private function minimumConfidence(): int
+    private function minimumConfidence(): float
     {
         $configured = config('lernplattform.mistakes.min_confidence');
 
@@ -141,6 +142,8 @@ class MistakeRecorder
             return self::UNREACHABLE_CONFIDENCE;
         }
 
-        return (int) round($share * 100);
+        // Rounded to six decimals, only the floating-point noise of the multiplication goes away: 0.6 stays 60.0 and
+        // 0.604 stays 60.4. Rounding to whole numbers would let 60 pass a minimum of 60.4.
+        return round($share * 100, 6);
     }
 }

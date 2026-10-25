@@ -3,6 +3,8 @@
 namespace App\Support;
 
 use App\MessageAuthor;
+use App\MistakeSource;
+use App\MistakeType;
 use App\Models\Answer;
 use App\Models\ExplanationMessage;
 use App\Models\ExplanationSession;
@@ -113,16 +115,34 @@ class PersonalDataExport
                         'antwort' => $answer->answer,
                         'punkte' => $answer->score,
                         'rueckmeldung' => $answer->feedback,
-                        // Only listed when a mistake type was classified: answers without one keep the old shape.
-                        ...($answer->mistake_type === null ? [] : [
-                            'fehlerart' => $answer->mistake_type->getLabel(),
-                            'fehlerart_quelle' => $answer->mistake_source?->getLabel(),
-                        ]),
+                        // Only listed when a mistake type was stored: answers without one keep the old shape. A stored
+                        // value the enum no longer knows must not break the whole export – see mistakeOf().
+                        ...($answer->getRawOriginal('mistake_type') === null ? [] : self::mistakeOf($answer)),
                     ])
                     ->values()
                     ->all(),
             ])
             ->all();
+    }
+
+    /**
+     * The mistake type of an answer as it belongs in the export: the label of a known value, otherwise the stored raw
+     * value. A value the enum no longer knows (an old row after a rename) must never break the whole answer under
+     * Art. 15/20 DSGVO – the data subject gets the raw text instead of an error.
+     *
+     * @return array{fehlerart: string, fehlerart_quelle: string|null}
+     */
+    private static function mistakeOf(Answer $answer): array
+    {
+        $type = (string) $answer->getRawOriginal('mistake_type');
+        $source = $answer->getRawOriginal('mistake_source');
+
+        return [
+            'fehlerart' => MistakeType::tryFrom($type)?->getLabel() ?? $type,
+            'fehlerart_quelle' => $source === null
+                ? null
+                : (MistakeSource::tryFrom((string) $source)?->getLabel() ?? (string) $source),
+        ];
     }
 
     /**

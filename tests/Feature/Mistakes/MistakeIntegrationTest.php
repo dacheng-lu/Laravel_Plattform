@@ -166,7 +166,7 @@ class MistakeIntegrationTest extends TestCase
             ->assertSee('Fast: ein Schritt fehlt.');
     }
 
-    public function test_a_teacher_correction_survives_a_second_run_of_the_recorder(): void
+    public function test_a_teacher_correction_survives_a_later_recorder_run(): void
     {
         config([
             'services.anthropic.enabled' => true,
@@ -244,14 +244,16 @@ class MistakeIntegrationTest extends TestCase
         $this->assertSame(MistakeType::Procedure, $untouchedSecond->mistake_type);
         $this->assertSame(MistakeSource::Claude, $untouchedSecond->mistake_source);
 
-        // A second evaluation of the same submission – the AI now names another type for the second answer. The
-        // recorder reads the evaluation the assistant returns, keyed by question id.
-        $secondEvaluation = ['answers' => [
+        // Recorder-Invariante, kein Re-Evaluations-Pfad: `evaluateSubmission` wird im Produktcode nur beim Abgeben
+        // aufgerufen (WorkOnHomework), es gibt keinen Endpunkt und keinen Job, der eine Abgabe erneut bewerten lässt.
+        // Der Test schiebt deshalb eine spätere, abweichende Bewertung direkt in den Recorder – genau das, was ein
+        // künftiger Nachlauf täte – und prüft, dass die Lehrkraft-Einordnung stehen bleibt.
+        $laterEvaluation = ['answers' => [
             $first->getKey() => ['score' => 40, 'feedback' => 'Fast: ein Schritt fehlt.', 'mistake_type' => 'procedure', 'mistake_confidence' => 90],
             $second->getKey() => ['score' => 50, 'feedback' => 'Fast: begründe noch.', 'mistake_type' => 'incomplete', 'mistake_confidence' => 80],
         ]];
 
-        app(MistakeRecorder::class)->recordForSubmission($submission->fresh(['answers.question']), $secondEvaluation);
+        app(MistakeRecorder::class)->recordForSubmission($submission->fresh(['answers.question']), $laterEvaluation);
 
         // Fehlerpfad: the teacher's correction is not overwritten.
         $unchanged = $this->answerOfQuestion($submission, $first);

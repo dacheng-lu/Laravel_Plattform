@@ -74,19 +74,25 @@ class DemoMistakeClassifierTest extends TestCase
         $this->assertSame(MistakeType::OffTopic, $this->classify('Der Ausflug der Klasse ging in den Zoo zu den Elefanten.')?->type);
     }
 
+    public function test_an_answer_that_shares_only_a_function_word_is_off_topic(): void
+    {
+        $prompt = 'Was braucht eine Pflanze zur Fotosynthese?';
+        $expected = 'Licht und Wasser.';
+
+        // "eine" stands in the question as well; without the stop words this answer would look like a shared word.
+        $this->assertSame(MistakeType::OffTopic, $this->classify('Das ist eine Frage über Autos', $expected, $prompt)?->type);
+    }
+
     public function test_an_answer_of_function_words_only_is_not_off_topic(): void
     {
         $prompt = 'Was braucht eine Pflanze zur Fotosynthese?';
         $expected = 'Licht und Wasser.';
 
-        // "eine" stands in the question as well, so without the stop words this would look like a shared word.
-        $this->assertSame(MistakeType::OffTopic, $this->classify('Das ist eine Frage über Autos', $expected, $prompt)?->type);
-
         // Nothing but function words says nothing about the topic: no label instead of a wrong one.
         $this->assertNull($this->classify('ja, das ist so', $expected, $prompt));
 
-        // Positivkontrolle: an answer with content of the question stays without that label.
-        $this->assertNull($this->classify('Pflanzen brauchen Licht und Wasser.', $expected, $prompt));
+        // Positivkontrolle im selben Test: eine Antwort mit einem Inhaltswort, das die Frage nicht kennt, wird eingeordnet.
+        $this->assertSame(MistakeType::OffTopic, $this->classify('Ich habe Autos gezählt', $expected, $prompt)?->type);
     }
 
     public function test_a_matching_answer_stays_unclassified(): void
