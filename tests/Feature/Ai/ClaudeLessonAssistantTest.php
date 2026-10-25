@@ -221,7 +221,7 @@ class ClaudeLessonAssistantTest extends TestCase
         $this->assertSame(['Eins', 'Zwei', 'Drei'], $evaluation['gaps']);
         $this->assertSame([$question->id => ['score' => 80, 'feedback' => 'Richtig.']], $evaluation['answers']);
 
-        Http::assertSent(function (Request $request): bool {
+        Http::assertSent(function (Request $request) use ($question): bool {
             $body = $request->body();
 
             // Die Zusammenfassung der Schülerin geht seit Entscheid A nicht mehr mit …
