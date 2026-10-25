@@ -163,8 +163,8 @@ class ClaudeLessonAssistant implements LessonAssistant
             content: [
                 // Issue #3, decision A: an evaluation carries the question, its expected answer and the student's own
                 // answer – nothing else. No lesson context (Fach/Thema/Datum), no summary of the teacher, no notes of
-                // the student, no worksheet files. The names inside these three texts are still replaced before they
-                // leave the platform.
+                // the teacher, no worksheet files and no summary of the student. The names inside these three texts
+                // are still replaced before they leave the platform.
                 ['type' => 'text', 'text' => "Fragen und Antworten:\n".$questions],
             ],
             schema: $this->objectSchema([

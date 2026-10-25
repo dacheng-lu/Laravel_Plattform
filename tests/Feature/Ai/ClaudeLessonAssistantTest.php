@@ -187,7 +187,11 @@ class ClaudeLessonAssistantTest extends TestCase
         app(LessonAssistant::class)->draftPracticeTask(Competency::factory()->create(), 'Biologie', collect(), []);
     }
 
-    public function test_evaluation_sends_the_texts_but_never_the_students_identity(): void
+    /**
+     * Issue #3, Entscheid A: an evaluation carries the question, its expected answer and the student's answer – no
+     * lesson context, no notes of the teacher, no summary of the student. Identity markers stay off the wire as before.
+     */
+    public function test_evaluation_sends_question_expected_answer_and_answer_but_neither_summary_nor_identity(): void
     {
         $student = User::factory()->student()->create([
             'name' => 'Zacharias Quellenberg',
@@ -195,7 +199,8 @@ class ClaudeLessonAssistantTest extends TestCase
             'email' => 'zacharias.quellenberg@example.org',
         ]);
         $lesson = Lesson::factory()->create();
-        $question = Question::factory()->for($lesson)->create();
+        // Ein fester Fragetext, damit die Positivkontrolle unten nicht an Umlaut-Escapes im rohen JSON hängt.
+        $question = Question::factory()->for($lesson)->create(['prompt' => 'Was macht Chlorophyll?']);
         $submission = Submission::factory()->for($lesson)->for($student, 'student')->create(['summary' => 'Meine eigene Zusammenfassung.']);
         $submission->answers()->create(['question_id' => $question->id, 'answer' => 'Meine Antwort auf die Frage.']);
 
@@ -219,8 +224,13 @@ class ClaudeLessonAssistantTest extends TestCase
         Http::assertSent(function (Request $request): bool {
             $body = $request->body();
 
-            $this->assertStringContainsString('Meine eigene Zusammenfassung.', $body);
+            // Die Zusammenfassung der Schülerin geht seit Entscheid A nicht mehr mit …
+            $this->assertStringNotContainsString('Meine eigene Zusammenfassung.', $body);
+
+            // … die Positivkontrollen zeigen, dass der Request überhaupt Inhalt trägt: Antwort und Fragetext sind drin.
             $this->assertStringContainsString('Meine Antwort auf die Frage.', $body);
+            $this->assertStringContainsString($question->prompt, $body);
+
             $this->assertStringNotContainsString('Zacharias', $body);
             $this->assertStringNotContainsString('Quellenberg', $body);
             $this->assertStringNotContainsStringIgnoringCase('zquellenberg', $body);
