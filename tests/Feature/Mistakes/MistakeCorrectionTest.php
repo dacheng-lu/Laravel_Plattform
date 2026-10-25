@@ -15,10 +15,12 @@ use App\Models\Submission;
 use App\Models\User;
 use Filament\Actions\Testing\TestAction;
 use Filament\Actions\ViewAction;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Livewire\Livewire;
+use PHPUnit\Framework\AssertionFailedError;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
-use Throwable;
 
 /**
  * The teacher may correct the mistake type of an answer in the submission view (spec AC-6). The correction is a hint:
@@ -374,8 +376,10 @@ class MistakeCorrectionTest extends TestCase
         $this->assertNull($foreignAnswer->mistake_source);
         $this->assertSame(15, $foreignAnswer->score);
 
-        // A teacher of another school does not get the action at all: it stays hidden, so there is no path to call it.
+        // A teacher of another school does not get the action at all: the policy denies it and it stays hidden, so
+        // there is no path to call it.
         $this->assertFalse($foreignTeacher->can('view', $this->lesson));
+        $this->assertFalse($foreignTeacher->can('correctMistake', $this->answer));
 
         $this->assertForcedCorrectionIsRefusedFor($foreignTeacher);
 
@@ -463,27 +467,88 @@ class MistakeCorrectionTest extends TestCase
         $this->assertNull($good->refresh()->mistake_source);
     }
 
+    public function test_the_kill_switch_hides_the_mistake_type_and_the_correction(): void
+    {
+        $action = TestAction::make('correctMistakes')->table($this->submission);
+
+        // Ausgeschaltet: die Abgabenansicht zeigt keine gespeicherte Fehlerart, die Korrektur wird nicht angeboten und
+        // ein erzwungener Aufruf schreibt nichts.
+        config()->set('lernplattform.mistakes.enabled', false);
+
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->mountAction(TestAction::make(ViewAction::class)->table($this->submission))
+            ->assertMountedActionModalDontSee(['Grundidee noch unklar', 'Regel-Hinweis, kann falsch sein'])
+            // Positivkontrolle derselben Ansicht: die Antwort selbst steht weiterhin da.
+            ->assertMountedActionModalSee('3/4, weil 6 und 8 durch 2 teilbar sind.');
+
+        // Die Berechtigung liegt vor – verweigert wird hier allein vom Schalter.
+        $this->assertTrue($this->teacher->can('correctMistake', $this->answer));
+
+        $this->assertForcedCorrectionIsRefusedFor($this->teacher);
+
+        $this->assertSame(MistakeType::Concept, $this->answer->refresh()->mistake_type);
+        $this->assertSame(MistakeSource::Demo, $this->answer->mistake_source);
+        $this->assertNull($this->plainAnswer->refresh()->mistake_type);
+
+        // Positivkontrolle in derselben Methode: eingeschaltet steht die Fehlerart da und die Korrektur schreibt.
+        config()->set('lernplattform.mistakes.enabled', true);
+
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->mountAction(TestAction::make(ViewAction::class)->table($this->submission))
+            ->assertMountedActionModalSee(['Grundidee noch unklar', 'Regel-Hinweis, kann falsch sein']);
+
+        Livewire::actingAs($this->teacher)
+            ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+            ->assertActionVisible($action)
+            ->callAction($action, data: [
+                'mistakes' => [
+                    $this->answer->getKey() => MistakeType::Procedure->value,
+                    $this->otherAnswer->getKey() => MistakeType::Procedure->value,
+                    $this->plainAnswer->getKey() => '',
+                ],
+            ])
+            ->assertNotified('Fehlerarten gespeichert');
+
+        $this->assertSame(MistakeType::Procedure, $this->answer->refresh()->mistake_type);
+        $this->assertSame(MistakeSource::Teacher, $this->answer->mistake_source);
+    }
+
     /**
-     * The Livewire path for a user who may not correct: Filament does not offer the action at all, and a forged mount
-     * does not get through either. Filament refuses to mount a hidden table action, so the callback with its
-     * Gate::authorize never runs; if a mount ever succeeded, the call sequence below still writes nothing – the
-     * caller's assertions on the stored rows prove that either way.
+     * The Livewire path for a user who may not correct (or for the switched-off feature): the action is not mounted as
+     * visible, and a forced call writes nothing. Filament's test helper refuses the call itself with an assertion that
+     * names the action; the policy refuses it with an AuthorizationException or a 403. Only these refusals count here –
+     * every other error is passed on, so a typo cannot hide behind the catch. The callers assert the stored rows.
      */
     private function assertForcedCorrectionIsRefusedFor(User $viewer): void
     {
-        $component = Livewire::actingAs($viewer)
+        Livewire::actingAs($viewer)
             ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
             ->assertActionHidden(TestAction::make('correctMistakes')->table($this->submission));
 
+        $refused = false;
+
         try {
-            // The raw Livewire methods, not the test shortcut: the way a forged request would take.
-            $component->call('mountTableAction', 'correctMistakes', (string) $this->submission->getKey());
-            $component->set('mountedTableActionsData.0.mistakes', [
-                $this->answer->getKey() => MistakeType::OffTopic->value,
-            ]);
-            $component->call('callMountedTableAction');
-        } catch (Throwable) {
-            // Refused: no action was mounted (or the platform rejects the call). Nothing was written.
+            Livewire::actingAs($viewer)
+                ->test(SubmissionsRelationManager::class, ['ownerRecord' => $this->lesson, 'pageClass' => EditLesson::class])
+                ->callAction(TestAction::make('correctMistakes')->table($this->submission), data: [
+                    'mistakes' => [
+                        $this->answer->getKey() => MistakeType::OffTopic->value,
+                    ],
+                ]);
+        } catch (AuthorizationException) {
+            // Refused by the policy.
+            $refused = true;
+        } catch (HttpExceptionInterface $exception) {
+            $this->assertSame(403, $exception->getStatusCode(), 'A refusal by the platform is a 403.');
+            $refused = true;
+        } catch (AssertionFailedError $exception) {
+            // Filament refuses to call a hidden action: "Failed asserting that an action with name […correctMistakes] is visible".
+            $this->assertStringContainsString('correctMistakes', $exception->getMessage());
+            $refused = true;
         }
+
+        $this->assertTrue($refused, 'Ein erzwungener Aufruf muss verweigert werden.');
     }
 }

@@ -55,16 +55,16 @@ class DemoMistakeClassifier implements MistakeClassifier
             return new MistakeClassification(MistakeType::Empty, 100, MistakeSource::Demo);
         }
 
+        // A reflection question has no single right answer: the rules stay silent here instead of labelling an open
+        // answer as incomplete or missing the point. An empty answer is still "no attempt" and wins over this rule.
+        if ($question->type === QuestionType::Reflection) {
+            return null;
+        }
+
         $shortRatio = (float) config('lernplattform.mistakes.demo_short_ratio', 0.3);
 
         if ($this->wordCount($text) < $shortRatio * $this->wordCount((string) $question->expected_answer)) {
             return new MistakeClassification(MistakeType::Incomplete, 70, MistakeSource::Demo);
-        }
-
-        // A reflection question has no single right answer: an answer that shares no word with it is not "off topic",
-        // so the rules stay silent here instead of labelling an open answer as missing the point.
-        if ($question->type === QuestionType::Reflection) {
-            return null;
         }
 
         $answerWords = $this->contentWords($text);

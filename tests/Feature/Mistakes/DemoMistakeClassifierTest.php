@@ -114,6 +114,22 @@ class DemoMistakeClassifierTest extends TestCase
         $this->assertSame(MistakeSource::Demo, $classified->source);
     }
 
+    public function test_a_short_answer_on_a_reflection_question_stays_unlabelled(): void
+    {
+        // Three words against a fourteen-word expectation: the length rule would call this "incomplete".
+        $short = 'Zoo, Elefanten, Ausflug.';
+
+        // On a reflection question the rules stay silent altogether – an open answer is not "incomplete" either.
+        $this->assertNull($this->classify($short, null, self::PROMPT, QuestionType::Reflection));
+
+        // Positivkontrolle in derselben Methode: dieselbe kurze Antwort auf eine Verständnisfrage ist „unvollständig".
+        $classified = $this->classify($short, null, self::PROMPT, QuestionType::Comprehension);
+
+        $this->assertNotNull($classified);
+        $this->assertSame(MistakeType::Incomplete, $classified->type);
+        $this->assertSame(70, $classified->confidence);
+    }
+
     private function classify(string $answer, ?string $expected = null, string $prompt = self::PROMPT, QuestionType $type = QuestionType::Comprehension): ?MistakeClassification
     {
         $question = Question::factory()->create([

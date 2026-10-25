@@ -89,6 +89,9 @@ class SubmissionsRelationManager extends RelationManager
                                 TextEntry::make('mistake_type')
                                     ->label('Fehlerart')
                                     ->badge()
+                                    // The kill switch reaches the view as well: with the mistake types switched off the
+                                    // submission shows no stored type, not even one from earlier data.
+                                    ->visible(fn (): bool => (bool) config('lernplattform.mistakes.enabled'))
                                     ->formatStateUsing(fn (mixed $state): string => match (true) {
                                         $state instanceof MistakeType => $state->getLabel(),
                                         is_string($state) => MistakeType::tryFrom($state)?->getLabel() ?? '',
@@ -142,10 +145,12 @@ class SubmissionsRelationManager extends RelationManager
                     ->visible(function (Submission $record): bool {
                         $first = $record->answers->first();
 
-                        // Nothing to correct when every answer is good enough, and only whoever may re-classify this
-                        // submission's answers sees the action at all; the action checks the same right again before
-                        // it writes, so a hidden action stays refused even if it were mounted.
-                        return $first instanceof Answer
+                        // The kill switch first: switched off, the action is not offered at all – not for a stored type
+                        // and not for a fresh one. Nothing to correct when every answer is good enough, and only whoever
+                        // may re-classify this submission's answers sees the action; the action checks the same right
+                        // again before it writes, so a hidden action stays refused even if it were mounted.
+                        return (bool) config('lernplattform.mistakes.enabled')
+                            && $first instanceof Answer
                             && self::correctableAnswers($record)->isNotEmpty()
                             && Gate::allows('correctMistake', $first);
                     })
@@ -165,6 +170,13 @@ class SubmissionsRelationManager extends RelationManager
                         /** @var array<int|string, mixed> $submitted */
                         $submitted = $data['mistakes'] ?? [];
                         $answers = $record->answers;
+
+                        // The kill switch is the first gate and returns silently: with the mistake types switched off the
+                        // action is not rendered at all, so no user sees a message about it. A crafted request that mounts
+                        // it anyway must neither write nor fall through to the authority check.
+                        if (! (bool) config('lernplattform.mistakes.enabled')) {
+                            return;
+                        }
 
                         // One authority check for the whole action and before anything is written: every answer of a
                         // submission belongs to the same student, so the policy decides for all of them alike.
