@@ -8,6 +8,7 @@ use App\MistakeSource;
 use App\MistakeType;
 use App\Models\Answer;
 use App\Models\Question;
+use App\QuestionType;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -96,9 +97,27 @@ class DemoMistakeClassifierTest extends TestCase
         $this->assertInstanceOf(MistakeClassification::class, $this->classify('Der Ausflug der Klasse ging in den Zoo zu den Elefanten.'));
     }
 
-    private function classify(string $answer, ?string $expected = null, string $prompt = self::PROMPT): ?MistakeClassification
+    public function test_a_reflection_question_never_gets_the_off_topic_label(): void
+    {
+        $unrelated = 'Der Ausflug der Klasse ging in den Zoo zu den Elefanten.';
+
+        // Eine Reflexionsfrage hat keine einzige richtige Antwort: die Regeln schweigen hier bewusst, statt eine offene
+        // Antwort als „am Thema vorbei" zu brandmarken (Spec-Leitplanke: kein Rateschluss).
+        $this->assertNull($this->classify($unrelated, null, self::PROMPT, QuestionType::Reflection));
+
+        // Positivkontrolle in derselben Methode: dieselbe Antwort auf eine Verständnisfrage wird eingeordnet.
+        $classified = $this->classify($unrelated, null, self::PROMPT, QuestionType::Comprehension);
+
+        $this->assertNotNull($classified);
+        $this->assertSame(MistakeType::OffTopic, $classified->type);
+        $this->assertSame(65, $classified->confidence);
+        $this->assertSame(MistakeSource::Demo, $classified->source);
+    }
+
+    private function classify(string $answer, ?string $expected = null, string $prompt = self::PROMPT, QuestionType $type = QuestionType::Comprehension): ?MistakeClassification
     {
         $question = Question::factory()->create([
+            'type' => $type,
             'prompt' => $prompt,
             'expected_answer' => $expected ?? self::EXPECTED,
         ]);
